@@ -1,0 +1,16 @@
+services:
+  freeswitch:
+    container_name: freeswitch
+    build: ./freeswitch
+    image: freeswitch
+    mem_limit: 300m
+    network_mode: "host"
+
+  attacker:
+    container_name: attacker
+    build: ./attacker
+    image: attacker
+    tty: true
+    volumes:
+      - ./attacker/spoofing.py:/spoofing.py
+      - ./attacker/dos-sipflood.py:/dos-sipflood.py

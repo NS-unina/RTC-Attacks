@@ -1,0 +1,36 @@
+services:
+  ttyd:
+    container_name: ttyd
+    build: ./ttyd
+    image: ttyd
+    command: ttyd --writable bash
+    ports:
+      - 7681:7681
+    stdin_open: true
+    tty: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    
+  mongo:
+    container_name: mongo
+    image: mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    ports:
+      - 27017:27017
+
+  snort:
+    container_name: snort
+    build: ./snort
+    image: snort
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./snort:/usr/local/etc/snort:ro
+      - ./captures:/captures
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped

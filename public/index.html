@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>I've been hacked!</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.5.0/css/all.css">
+  <link rel="shortcut icon" href="logo.png" type="image/x-icon">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.css">
+  <style>
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgb(1, 102, 160) transparent;
+      font-family: "Source Sans Pro", sans-serif;
+    }
+
+    body, html {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: rgba(4, 35, 57, 0.9);
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    b, strong {
+      color:rgba(0, 111, 151, 0.603);
+    }
+
+    code {
+      padding: 2px;
+      background-color: rgba(0, 111, 151, 0.603);
+      color: #fff;
+      border-radius: 5px;
+    }
+    
+    pre code {
+      background-color: transparent;  
+    }
+
+    pre {
+      background-color: rgba(0, 111, 151, 0.603);
+      padding: 10px;
+      border-radius: 10px;
+      color: rgb(255, 255, 255);
+    }
+
+    input::placeholder {
+      color: #fff;
+    }
+
+    .main-container {
+      width: 100%;
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      transition: grid-template-columns .3s ease;
+    }
+
+    .main-container.sidebar-collapsed {
+      grid-template-columns: 70px 1fr !important;
+    }
+
+    .sidebar {
+      background: rgba(123, 197, 250, 0.552);
+      color: white;
+      padding: 20px 10px;
+      transition: width .3s ease, padding .3s ease;
+      overflow-y: auto;
+      border-right: 1px solid;
+    }
+
+    .sidebar.collapsed {
+      width: 60px !important;
+      overflow-y: hidden;
+      padding: 20px 5px;
+    }
+
+    .img-logo {
+      width: 100%;
+      border-radius: 40px;
+      padding: 20px;
+      transition: opacity .3s ease;
+      overflow-y: auto;
+    }
+
+    .sidebar.collapsed .img-logo, .sidebar.collapsed .menu-item {
+      opacity: 0;
+    }
+
+    .search-bar {
+      background-color: transparent;
+      border-left: none;
+      border-right: none;
+      border-top: none;
+      border-bottom: 1px solid #fff;
+      color: #fff;
+      width: 80%;
+      padding: 5px;
+    }
+
+    .search-btn {
+      background-color: transparent;
+      border: none;
+      cursor: pointer;
+    }
+    
+    #search-icon {
+      color: #fff
+    }
+
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 10px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: .2s;
+      white-space: nowrap;
+      overflow-y: auto;
+      transition: opacity .3s ease;
+    }
+    
+    .menu-item.search-item {
+      background: transparent;
+    }
+
+    .menu-item.search-item:hover {
+      background: transparent;
+    }
+
+    input:focus {
+      outline: none; 
+    }
+
+    .menu-item:hover {
+      background: rgba(255,255,255,0.15);
+    }
+
+    .sidebar.collapsed .menu-item {
+      justify-content: center;
+      gap: 0;
+    }
+
+    .content {
+      padding: 20px;
+      overflow-y: auto;
+      background-color: rgba(123, 197, 250, 0.552);
+    }
+    
+    .intro-wrapper {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+    }
+
+    .content img {
+      max-width: 650px;
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+      display: block;
+      margin: 20px auto;
+    }
+
+    .content h1, .content h2, .content h3, .content h4 {
+      color: #1e3c72;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .content h1 {
+      color: #fff;
+    }
+
+    .intro-hero {
+      background: white;
+      border-radius: 20px;
+      padding: 60px 50px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+      max-width: 800px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .intro-hero h1 {
+      font-size: 2.4rem;
+      color: #1e3c72;
+      margin-bottom: 15px;
+    }
+
+    .intro-hero p {
+      color: #555;
+      margin-bottom: 40px;
+    }
+
+    .intro-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 25px;
+    }
+
+    .intro-card {
+      background: #f7f9fc;
+      padding: 25px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+    }
+
+    .div-card {
+      text-align: center;
+    }
+
+    .intro-card i {
+      font-size: 2.2rem;
+      color: #1e3c72;
+      margin-bottom: 15px;
+    }
+
+    .intro-card h3 {
+      margin-bottom: 10px;
+    }
+
+    .intro-card p {
+      margin-bottom: 0;
+    }
+
+    .name-scenario-selected {
+      padding: 20px;
+    }
+
+    .description-scenario-selected, .container-scenario-selected, .steps-scenario-selected, .logs-selected {
+      padding: 20px;
+      background: white;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+      border-radius: 20px;
+      margin-bottom: 15px;
+    }
+
+    .logs-selected pre {
+      max-height: 300px;
+    }
+
+    .fade-out {
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+
+    .cloud-panel {
+      height: calc(100vh - 50px);
+      overflow-y: auto;
+      background: linear-gradient(145deg, #1e3c72, #2a5298);
+      padding: 20px;
+      border-radius: 10px;
+    }
+
+    .cloud-panel h3, .cloud-panel p {
+      color: #fff;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-row p {
+      margin: 0;
+    }
+
+    .top-controls {
+      position: fixed;
+      top: 40px;
+      right: 40px;
+      display: flex;
+      gap: 10px;   
+      z-index: 9999;
+    }
+
+    .btn, .btn-build, .btn-build-all {
+      padding: 10px 18px;
+      border-radius: 10px;
+      border: none;
+      color: white;
+      cursor: pointer;
+      background: #1e3c72;
+    }
+
+    #btn-start, #ec2-yes {
+      background: #15ac29;
+    }
+
+    #btn-start:hover, #ec2-yes:hover {
+      background: #0f8e4c;
+    }
+
+    #btn-stop, #ec2-no {
+      background: #c53737;
+    }
+
+    #btn-stop:hover, #ec2-no:hover {
+      background: #a62f2f;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .cloud-panel .btn {
+      display: none;
+      color: #1e3c72;
+      background-color: #fff;
+    }
+
+    #vm-status {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 50px;
+    margin-left: 10px;
+    position: relative;
+  }
+
+  #vm-status.running {
+    background-color: #d4f0d4; 
+    color: #0a660a;
+  }
+
+  #vm-status.stopped {
+    background-color: #f0d4d4; 
+    color: #8b0000;
+  }
+
+  #vm-status::before {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+    background-color: currentColor;
+  }
+
+  @media (max-width: 900px) {
+    .main-container {
+      grid-template-columns: 1fr;
+    }
+    .sidebar {
+      display: none;
+    }
+  } 
+  </style>
+</head>
+<body>
+  <div class="main-container">
+    <div class="sidebar">
+      <img class="img-logo" src="logo.png" alt="">
+      <div class="menu-item search-item">
+        <input type="text" class="search-bar" placeholder="Search">
+        <i class="fa fa-search" id="search-icon"></i>
+      </div>
+    </div>
+    <div class="content">
+      <div class="intro-wrapper">
+        <div id="intro" class="intro-hero">
+          <h1>I've been hacked!</h1>
+          <p>
+            Welcome to an interactive cybersecurity playground.<br>
+            Choose a scenario from the left menu and start investigating real-time attacks.
+          </p>
+          <div class="intro-cards">
+            <div class="intro-card">
+              <div class="div-card">
+                <i class="fas fa-bug"></i>
+                <h4>Real-Time Vulnerabilities</h4>
+                <p>Explore SIP, RTP, WebRTC, XSS, NoSQLi and more.</p>
+              </div>
+            </div>
+            <div class="intro-card">
+              <div class="div-card">
+                <i class="fas fa-terminal"></i>
+                <h4>Hands-on</h4>
+                <p>Use a real terminal via browser and break things safely.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="scenario-container"></div>
+      <div class="top-controls">
+        <button id="btn-start" class="btn"style="display:none;">Start</button>
+        <button id="btn-stop" class="btn" style="display:none;">Stop</button>
+      </div>
+      <div id="vm-container">
+        <div class="cloud-panel hidden">
+          <h3>Virtual Machine</h3>
+          <div class="status-row">
+            <p>Status: <span id="vm-status">Unknown</span></p>
+            <button class="btn">New terminal <i class="fa fa-plus"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/showdown@2.1.0/dist/showdown.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js"></script>
+  <script>
+    const startMachine = document.querySelector("#btn-start");
+    const stopMachine = document.querySelector("#btn-stop");
+    const vmStatus = document.querySelector("#vm-status");
+    const vmContainer = document.querySelector("#vm-container");
+    const cloudPanel = document.querySelector(".cloud-panel");
+    const addTerminal = document.querySelector(".cloud-panel .btn");
+    const sidebar = document.querySelector('.sidebar');
+    const mainContainer = document.querySelector('.main-container');
+    const searchbtn = document.querySelector('.search-btn');
+    const contentDivContainers = document.createElement("div");
+    const btnAllContainers = document.createElement("button");
+    const contentContainersh3 = document.createElement("h3");
+    let selectedMachine = false;
+    let nameScenario = "";
+    let ID = 0;
+    const notyf = new Notyf({
+      position: {
+        x: 'center',
+        y: 'top',
+      },
+      duration: 2000, 
+    });
+    const folders = {
+      1: "1_2_sip_spoofing_dos_freeswitch",
+      2: "1_2_sip_spoofing_dos_freeswitch",
+      3: "3_heap_overflow_kamailio",
+      4: "4_rtp_bleed_injection_asterisk",
+      5: "5_coturn_access_bypass",
+      6: "6_socketIOFile_webshell",
+      7: "7_8_vdo.ninja_xss_nosqli",
+      8: "9_firefox_access_cam_web",
+    }
+    const contentArea = document.querySelector(".content");
+
+    function getAllScenarios() {
+      fetch("/scenarios")
+        .then(res => res.json())
+        .then(data => {
+          const {names, ids} = data;
+
+          names.forEach((name, index) => {
+            const div = document.createElement("div");
+            div.classList.add("menu-item");
+            div.id = ids[index];
+            div.textContent = name;
+            
+            div.addEventListener("click", () => {
+              selectScenario(div);
+            })
+            document.querySelector(".sidebar").appendChild(div);
+          });
+        })
+        .catch(err => notyf.error(`Error: ${err}`));
+    }
+
+    function selectScenario(div) {
+      document.querySelector(".intro-wrapper").style.display = "none";
+      document.querySelector("#scenario-container").innerHTML = "";
+      contentDivContainers.innerHTML = "";
+
+      fetch(`/scenario/${div.id}`)
+      .then(res => res.json())
+      .then(data => {
+        ID = div.id
+        
+        contentDivContainers.classList.add("container-scenario-selected");
+        contentDivContainers.id = "container-scenario-selected-" + ID;
+        contentContainersh3.textContent =  "Images"
+        btnAllContainers.classList.add("btn-build-all");
+        btnAllContainers.id = "btn-all-scenario-" + ID;
+        btnAllContainers.textContent = "Build ALL images";
+        
+        if(startMachine.style.display === "inline-block"){
+          startMachine.style.display = "none"
+        }
+
+        const {name, description, steps} = data;
+        nameScenario = name;
+        const contentDivName = document.createElement("h1");
+        contentDivName.classList.add("name-scenario-selected");
+        contentDivName.textContent = name;
+        contentDivName.id = "name_"+ ID
+        document.querySelector("#scenario-container").appendChild(contentDivName);
+        
+        fetch("/images-to-build", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            id: ID
+          })
+        })
+        .then(res => res.json())
+        .then(data  => {
+          const containers = data.containers;
+
+          if (containers.length === 0) {
+            notyf.success("No images to build");
+            setTimeout(() => document.querySelector("#container-scenario-selected-"+ ID).remove(), 1000);
+            setTimeout(() => document.getElementById("btn-start").style.display = "inline-block", 1000);
+            return;
+          }
+          
+          containers.forEach((container, index) => {
+            const preContainer = document.createElement("pre")
+            preContainer.textContent = container
+            preContainer.style.display = "flex"
+            preContainer.style.justifyContent = "space-between";
+            preContainer.style.alignItems = "center";
+            preContainer.classList.add("image_container");
+            preContainer.id = "image_" + ID
+            const btnOneBuild = document.createElement("button");
+            btnOneBuild.classList.add("btn-build")
+            btnOneBuild.textContent = "Build"
+            btnOneBuild.id = "btn_" + index
+            preContainer.appendChild(btnOneBuild)
+            contentDivContainers.appendChild(preContainer);
+
+            btnOneBuild.addEventListener("click", async() => {
+              try {
+                const res = await fetch("/build", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json"
+                  },
+                  body: JSON.stringify({
+                    image: container,
+                    folder: folders[ID]
+                  })
+                })
+              
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder("utf-8", { fatal: false }); 
+                
+                const pre = document.createElement("pre")
+                const code = document.createElement("code")
+                pre.appendChild(code)
+                document.querySelector(".logs-selected").appendChild(pre)
+
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) {
+                    decoder.decode();
+                    break;
+                  }
+                  
+                  const textChunk = decoder.decode(value, { stream: true });
+                  code.textContent += stripAnsi(textChunk);
+                }
+
+                notyf.success(`Image ${container} have been build`);
+                preContainer.classList.add("fade-out");
+                setTimeout(() => {
+                  preContainer.remove()
+                  if (document.querySelectorAll(".image_container").length === 0){
+                    document.querySelector("#container-scenario-selected-"+ ID).classList.add("fade-out");
+                    setTimeout(() => document.querySelector("#container-scenario-selected-"+ ID).remove(), 400);
+                    document.getElementById("btn-start").style.display = "inline-block";
+                  }
+                }, 400);
+              } catch (err) {
+                notyf.error("Error: " + err);
+              } 
+            })
+          });
+          
+          btnAllContainers.addEventListener("click", async() => {
+            let elements = Array.from(document.querySelectorAll(".image_container"))
+            .map(el => el.childNodes[0].textContent.trim()).join(" ");
+            
+            try {
+              const res = await fetch("/build-all", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                  folder: folders[ID],
+                  elements: elements
+                })
+              })
+            
+              const reader = res.body.getReader();
+              const decoder = new TextDecoder("utf-8", { fatal: false }); 
+              
+              const pre = document.createElement("pre")
+              const code = document.createElement("code")
+              pre.appendChild(code)
+              document.querySelector(".logs-selected").appendChild(pre)
+
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) {
+                  decoder.decode(); 
+                  break;
+                }
+                
+                const textChunk = decoder.decode(value, { stream: true });
+                code.textContent += stripAnsi(textChunk);
+              }
+
+              notyf.success("All images have been build");
+              document.querySelector("#container-scenario-selected-"+ ID).classList.add("fade-out");
+              setTimeout(() => document.querySelector("#container-scenario-selected-"+ ID).remove(), 400);
+              document.getElementById("btn-start").style.display = "inline-block";
+            } catch (err) {
+              notyf.error("Error: " + err);
+            } 
+          })
+          contentDivContainers.appendChild(btnAllContainers);
+        })
+
+        contentDivContainers.appendChild(contentContainersh3);
+        document.querySelector("#scenario-container").appendChild(contentDivContainers);
+
+        const contentDivLogs = document.createElement("div");
+        contentDivLogs.classList.add("logs-selected");
+        contentDivLogs.id = "logs-selected-" + ID;
+        const h3Log = document.createElement("h3");
+        h3Log.textContent = "Logs"
+        contentDivLogs.appendChild(h3Log)
+        document.querySelector("#scenario-container").appendChild(contentDivLogs);
+
+        const contentDivDescription = document.createElement("div");
+        contentDivDescription.classList.add("description-scenario-selected");
+        const converterDescription = new showdown.Converter();
+        const htmlDescription = converterDescription.makeHtml(description);
+        contentDivDescription.innerHTML = htmlDescription;
+        contentDivDescription.id = "description_"+ ID
+        document.querySelector("#scenario-container").appendChild(contentDivDescription);
+
+        const contentDivSteps = document.createElement("div");
+        contentDivSteps.classList.add("steps-scenario-selected");
+        const converterSteps = new showdown.Converter();
+        const htmlSteps = converterSteps.makeHtml(steps);
+        contentDivSteps.innerHTML = htmlSteps;
+        document.querySelector("#scenario-container").appendChild(contentDivSteps);
+        })
+        .catch((err) => {
+          notyf.error("Error: " + err);
+        })  
+    }
+
+    // Regex per rimuovere escape codes ANSI (colori, cursore, ecc.)
+    function stripAnsi(str) {
+      if (!str) return "";
+      return str.replace(/\x1B\[[0-9;]*[A-Za-z]/g, '')
+                .replace(/\x1B\][^\x07]*\x07/g, '')
+                .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      getAllScenarios();
+    });    
+
+    const intro = document.querySelector(".intro-hero");
+    const name = document.querySelector(".name-scenario-selected");
+    const desc = document.querySelector(".description-scenario-selected");
+    const steps = document.querySelector(".steps-scenario-selected");
+    const input = document.querySelector(".search-bar");
+
+    input.addEventListener("input", () => {
+      const items = sidebar.querySelectorAll(".menu-item:not(.search-item)");
+      items.forEach(item => item.remove());
+      fetch(`/search/?name=${encodeURIComponent(input.value)}`)
+      .then(res => res.json())
+      .then(data => {
+        data.forEach(scenario => {
+          const div = document.createElement("div");
+          div.classList.add("menu-item");
+          div.textContent = scenario.name;
+          div.id = scenario.id; 
+          div.addEventListener("click", () => {
+            selectScenario(div)
+          })
+          sidebar.appendChild(div);
+        });
+      })
+    })
+    
+    startMachine.addEventListener("click", async () => {        
+      cloudPanel.classList.remove("hidden");
+      startMachine.style.display = "none";
+      stopMachine.style.display = "inline-block";
+
+      vmStatus.className = "";
+      vmStatus.classList.add("running");
+            
+      try{
+        const res = await fetch("/make-start", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            folder: folders[ID]
+          })
+        })
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8", { fatal: false });
+        
+        const pre = document.createElement("pre")
+        const code = document.createElement("code")
+        pre.appendChild(code)
+        document.querySelector(".logs-selected").appendChild(pre)
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            decoder.decode();
+            break;
+          }
+          
+          const textChunk = decoder.decode(value, { stream: true });
+          code.textContent += stripAnsi(textChunk);
+        }
+
+        setTimeout(cloudPanel.scrollIntoView({ bottom: 0, behavior: "smooth" }), 1000)
+              
+        vmStatus.textContent = "Running";
+        
+        // Iframe
+        const iframe = document.createElement("iframe");
+        iframe.src = "http://localhost:7681";
+        iframe.style.width = "100%";
+        iframe.style.height = "70vh";
+        iframe.style.border = "1px solid #ccc";
+        iframe.style.borderRadius = "10px";
+        iframe.style.marginTop = "10px";
+        cloudPanel.appendChild(iframe);
+      }
+      catch(err) {
+        vmStatus.textContent = "Error: " + err
+      } 
+
+      addTerminal.style.display = "inline-block";
+    })
+
+    stopMachine.addEventListener("click", async() => {
+      addTerminal.style.display = "none";
+      vmStatus.textContent = "Stopping...";
+      vmStatus.className = "";
+      vmStatus.classList.add("stopped");
+      cloudPanel.querySelector("iframe").remove();
+
+      try{
+        const res = await fetch("/make-stop", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            folder: folders[ID]
+          })
+        })
+        
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8", { fatal: false });
+        
+        const pre = document.createElement("pre")
+        const code = document.createElement("code")
+        pre.appendChild(code)
+        document.querySelector(".logs-selected").appendChild(pre)
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            decoder.decode();
+            break;
+          }
+          
+          const textChunk = decoder.decode(value, { stream: true });
+          code.textContent += stripAnsi(textChunk);
+        }
+
+        cloudPanel.classList.add("hidden");
+        startMachine.style.display = "inline-block";
+        stopMachine.style.display = "none"; 
+        notyf.success("Containers stopped");
+
+        setTimeout(() => contentArea.scrollTo({ top: 0, behavior: "smooth" }), 1000);
+      }catch(err) {
+        notyf.error("Error: " + err);
+      }
+    });
+
+    addTerminal.addEventListener("click", () => {
+      window.open("http://localhost:7681")
+    })
+  </script>
+</body>
+</html>

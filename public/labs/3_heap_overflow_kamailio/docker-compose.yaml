@@ -1,0 +1,15 @@
+services:
+  kamailio:
+    build: ./kamailio
+    image: kamailio
+    container_name: kamailio
+    network_mode: "host"
+
+  sipp101:
+    container_name: sipp101
+    build: ./sipp
+    image: sipp101
+    tty: true
+    volumes:
+      - ./sipp/xml/registration101.xml:/sipp/xml/registration101.xml
+      - ./sipp/xml/overflow.xml:/sipp/xml/overflow.xml
