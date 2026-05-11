@@ -38,6 +38,14 @@ Install the dependencies and start the web application:
 npm install
 node server.js
 ```
+At the first run, the application will automatically build the necessary Docker images for the attack scenarios, which may take some time.
+
+If you want to monitor the build of the several images, you can run the following command before starting the web application:
+```bash
+docker-compose -f docker-compose.yml build --progress=plain
+``` 
+When the build is complete, you can start the web application as described above.
+
 
 After that you can connect at: ```http://localhost:8888```
 
