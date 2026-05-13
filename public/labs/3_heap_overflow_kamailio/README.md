@@ -9,6 +9,29 @@
 ## Description
 In this scenario, due to a malformed request sent to the server, it crashes because of memory corruption: the data is written beyond the dynamically allocated memory.
 
+## Quick automation with Makefile
+You can run the full exploit + crash check with:
+
+```bash
+make auto-attack
+```
+
+If needed, set the target explicitly:
+
+```bash
+make auto-attack TARGET_IP=<IP_VM> KAMAILIO_PORT=5060
+```
+
+By default, this lab now uses an internal Docker subnet and targets `10.13.0.5`, so it no longer depends on host port `5060`.
+
+Useful helpers:
+```bash
+make overflow-attack TARGET_IP=<IP_VM>
+make check-kamailio-running
+make check-crash
+make kamailio-status
+```
+
 ## How to reproduce the issue
 If a REGISTER request contains a malformed or excessively long  ```branch``` parameter or ```From tag``` — fields that are not properly bounded in vulnerable versions — the call to ```tmx_check_pretran()``` function in ```tmx_pretran.c``` file will trigger an off-by-one heap-based buffer overflow, causing a segmentation fault and crashing the container.
 

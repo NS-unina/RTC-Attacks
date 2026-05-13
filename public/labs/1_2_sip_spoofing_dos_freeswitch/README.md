@@ -5,6 +5,32 @@
 ## Description
 In this scenario, the first attack consists of sending a SIP Message from an unregistered user impersonating another user (spoofing). In the second attack, continuous registration requests are sent to the FreeSWITCH server, causing the container to crash (DoS via SIP Flooding).
 
+## Quick automation with Makefile
+You can automate both attacks similarly to the RTP Bleed lab:
+
+```bash
+# Scenario 1: SIP spoofing with legit CLI client monitoring
+make auto-attack SCENARIO=1 TARGET_IP=<IP_VM> TARGET_EXT=1001 SIP_SERVER=<IP_VM>
+
+# Scenario 2: DoS SIP flooding (runs in background)
+make auto-attack SCENARIO=2 TARGET_IP=<IP_VM>
+make dos-stop
+```
+
+Useful helpers:
+```bash
+make spoof-attack TARGET_IP=<IP_VM> TARGET_EXT=1001
+make client-up SIP_SERVER=<IP_VM> CLIENT_EXT=1001 CLIENT_PASS=1234
+make client-wait-registered CLIENT_EXT=1001
+make client-logs
+make client-watch
+make client-check-spoof
+make dos-start TARGET_IP=<IP_VM>
+make dos-check
+make dos-logs
+make dos-stop
+```
+
 ## 1. How to reproduce the issue - SIP Spoofing
 The vulnerability affects the SIP server, which accepts unauthenticated messages. 
 Because the server does not verify that the sender is registered (i.e. ```auth-messages = false``` by default), the spoofed message will be accepted — resulting in the spoofed user (e.g. ```UniCredit```) appearing to send the message.
@@ -15,6 +41,28 @@ The username corresponds to the chosen value, while the password is <b>1234</b>.
 To complete the registration, the SIP server must be specified. The IP address of the VM hosting the containers is used:
 
 ![registration](/public/labs/1_2_sip_spoofing_dos_freeswitch/img/1001.png)
+
+### Optional: Use the headless legitimate SIP client (recommended for automation)
+Instead of desktop Linphone, you can run the bundled `sip-cli-1001` container and monitor its logs:
+
+```bash
+make client-up SIP_SERVER=<IP_VM> CLIENT_EXT=1001 CLIENT_PASS=1234
+make client-wait-registered CLIENT_EXT=1001
+make client-watch
+```
+
+Then trigger spoofing in another terminal:
+```bash
+make spoof-attack TARGET_IP=<IP_VM> TARGET_EXT=1001
+```
+
+To check evidence without live watch:
+```bash
+make client-check-spoof
+make client-logs
+```
+
+When spoofing is successful, logs include `[INCOMING_MESSAGE]` entries with `From: UniCredit` and the fake withdrawal text.
 
 ### Step 1.2: Exploit the vulnerability
 
@@ -102,6 +150,27 @@ while True:
 ```
 
 You can observe this by monitoring the container with `docker stats`: after some time memory consumption grows until it hits the limit, then the container terminates.
+
+### Automated DoS check (memory + crash validation)
+Use the automated check to verify scenario 2 end-to-end:
+
+```bash
+make auto-attack SCENARIO=2
+```
+
+or manually:
+
+```bash
+make dos-start TARGET_IP=<IP_VM>
+make dos-check
+```
+
+`dos-check` samples FreeSWITCH memory every few seconds and succeeds only when the `freeswitch` container status is no longer `running` (crashed/exited).  
+The memory timeline is saved to:
+
+```bash
+/tmp/freeswitch-dos-mem.log
+```
 
 Before:
 

@@ -3,13 +3,27 @@ services:
     build: ./kamailio
     image: kamailio
     container_name: kamailio
-    network_mode: "host"
+    networks:
+      lab_net:
+        ipv4_address: 10.13.0.5
 
   sipp101:
     container_name: sipp101
     build: ./sipp
     image: sipp101
     tty: true
+    depends_on:
+      - kamailio
     volumes:
       - ./sipp/xml/registration101.xml:/sipp/xml/registration101.xml
       - ./sipp/xml/overflow.xml:/sipp/xml/overflow.xml
+    networks:
+      lab_net:
+        ipv4_address: 10.13.0.10
+
+networks:
+  lab_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.13.0.0/24

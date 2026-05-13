@@ -4,13 +4,45 @@ services:
     build: ./freeswitch
     image: freeswitch
     mem_limit: 300m
-    network_mode: "host"
+    networks:
+      lab_net:
+        ipv4_address: 10.12.0.5
 
   attacker:
     container_name: attacker
     build: ./attacker
     image: attacker
     tty: true
+    depends_on:
+      - freeswitch
     volumes:
       - ./attacker/spoofing.py:/spoofing.py
       - ./attacker/dos-sipflood.py:/dos-sipflood.py
+    networks:
+      lab_net:
+        ipv4_address: 10.12.0.20
+
+  sip-cli-1001:
+    container_name: sip-cli-1001
+    build: ./sip-cli
+    image: sip-cli-fs
+    tty: true
+    depends_on:
+      - freeswitch
+    environment:
+      SIP_SERVER: ${SIP_SERVER:-10.12.0.5}
+      SIP_DOMAIN: ${SIP_SERVER:-10.12.0.5}
+      SIP_USERNAME: ${CLIENT_EXT:-1001}
+      SIP_PASSWORD: ${CLIENT_PASS:-1234}
+      SIP_CONTACT_IP: ${CLIENT_IP:-10.12.0.31}
+      LOCAL_PORT: ${CLIENT_PORT:-5062}
+    networks:
+      lab_net:
+        ipv4_address: 10.12.0.31
+
+networks:
+  lab_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.12.0.0/24

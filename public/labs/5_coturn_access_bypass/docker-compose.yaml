@@ -3,7 +3,9 @@ services:
     container_name: coturn
     build: ./coturn
     image: coturn
-    network_mode: "host"
+    networks:
+      lab_net:
+        ipv4_address: 10.14.0.5
     command: turnserver -v --user=username1:password1
 
   stunner:
@@ -11,11 +13,22 @@ services:
     build: ./stunner
     image: stunner
     tty: true
-    network_mode: "host"
+    depends_on:
+      - coturn
+    networks:
+      lab_net:
+        ipv4_address: 10.14.0.10
     command: > 
       stunner socks 
-      --turnserver 10.0.0.245:3478 
+      --turnserver 10.14.0.5:3478 
       --protocol tcp 
       --username username1 
       --password password1 
       --listen 0.0.0.0:9999
+
+networks:
+  lab_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.14.0.0/24

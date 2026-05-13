@@ -6,8 +6,29 @@
 ## Description
 In this scenario, after creating a socks5 proxy to the TURN server, it is possible using specific HTTP GET requests to access the loopback interface of the server.
 
+## Quick automation with Makefile
+You can run the full bypass verification with:
+
+```bash
+make auto-attack
+```
+
+This performs:
+1. `127.0.0.1` request through SOCKS5 (must be blocked);
+2. `[::1]` request through SOCKS5 (must succeed - vulnerable behavior);
+3. `[::]` request through SOCKS5 (must succeed - vulnerable behavior).
+
+Useful helpers:
+```bash
+make coturn-http-start
+make coturn-http-stop
+make bypass-check
+make follow-coturn
+make start-stunner
+```
+
 ## How to reproduce the issue
-**Note**: First, update the TURN server's IP address with you machine's IP in ```docker-compose.yaml``` (stunner container).
+**Note**: The provided Compose now uses an internal Docker network and preconfigured TURN endpoint (`10.14.0.5`) for reproducible testing.
 
 The <i>coTURN</i> container is started automatically with the following command:
 ```bash
@@ -19,7 +40,7 @@ docker logs coturn --follow
 ```
 The <i>STUNner</i> container is started automatically with the following command:
 ```bash
-stunner socks --turnserver 192.168.1.50:3478 --protocol tcp --username username1 --password password1 --listen 0.0.0.0:9999
+stunner socks --turnserver 10.14.0.5:3478 --protocol tcp --username username1 --password password1 --listen 0.0.0.0:9999
 ```
 This command creates a `socks5` server connected to the TURN server. It uses TCP as the protocol and the same credentials used to start the coTURN server; it listens on `0.0.0.0:9999`.
 

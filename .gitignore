@@ -27,3 +27,5 @@ raw/
 
 recordings/**
 !recordings/.gitkeep
+
+docs/
