@@ -1,1 +1,3 @@
-FROM nsunina/wireshark:1.0
+FROM lscr.io/linuxserver/wireshark:latest
+
+RUN apk --update add tshark

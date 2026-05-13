@@ -8,3 +8,7 @@ RUN apt-get update && \
     apt-get install -y asterisk --no-install-recommends tzdata && \
     cp -r /usr/share/asterisk /etc/asterisk && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+COPY entrypoint.sh /usr/local/bin/asterisk-entrypoint.sh
+
+RUN chmod +x /usr/local/bin/asterisk-entrypoint.sh

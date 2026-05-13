@@ -14,7 +14,7 @@ services:
     network_mode: "host"
     command: > 
       stunner socks 
-      --turnserver 192.168.1.50:3478 
+      --turnserver 10.0.0.245:3478 
       --protocol tcp 
       --username username1 
       --password password1 

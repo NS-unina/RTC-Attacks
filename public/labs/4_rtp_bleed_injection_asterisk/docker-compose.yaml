@@ -3,30 +3,207 @@ services:
     container_name: asterisk
     build: ./asterisk
     image: asterisk
-    command: asterisk -f -vv
+    command: /usr/local/bin/asterisk-entrypoint.sh asterisk -f -vv
     tty: true
-    network_mode: "host"
     environment:
-      EXTERNAL_IP: 192.168.1.50
-      LOCAL_NET: 192.168.1.0/24
+      EXTERNAL_IP: 10.10.0.5
+      LOCAL_NET: 10.10.0.0/24
     volumes:
-      - ./asterisk/config:/etc/asterisk     
+      - ./asterisk/config:/etc/asterisk
+      - ./recordings:/var/spool/asterisk/monitor
+    ports:
+      - "5060:5060/udp"
+      - "10000-10099:10000-10099/udp"
+      - "3003:3000"
+      - "3004:3001"
+    networks:
+      lab_net:
+        ipv4_address: 10.10.0.5
+
+  # linphone-7001:
+  #   container_name: linphone-7001
+  #   build: ./linphone
+  #   image: linphone
+  #   environment:
+  #     PUID: 1000
+  #     PGID: 1000
+  #     TZ: Europe/Rome
+  #     SELKIES_MANUAL_WIDTH: 1024
+  #     SELKIES_MANUAL_HEIGHT: 768
+  #   volumes:
+  #     - linphone_7001_config:/config
+  #   ports:
+  #     - "3001:3000"
+  #   expose:
+  #     - "5060/udp"
+  #     - "10000-10100/udp"
+  #   shm_size: "1gb"
+  #   depends_on:
+  #     - asterisk
+  #   networks:
+  #     lab_net:
+  #       ipv4_address: 10.10.0.11
+
+  # linphone-7002:
+  #   container_name: linphone-7002
+  #   build: ./linphone
+  #   image: linphone
+  #   environment:
+  #     PUID: 1000
+  #     PGID: 1000
+  #     TZ: Europe/Rome
+  #     SELKIES_MANUAL_WIDTH: 1024
+  #     SELKIES_MANUAL_HEIGHT: 768
+  #   volumes:
+  #     - linphone_7002_config:/config
+  #   ports:
+  #     - "3002:3000"
+  #   expose:
+  #     - "5060/udp"
+  #     - "10000-10100/udp"
+  #   shm_size: "1gb"
+  #   depends_on:
+  #     - asterisk
+  #   networks:
+  #     lab_net:
+  #       ipv4_address: 10.10.0.12
+
+  # linphone-cli-7001:
+  #   container_name: linphone-cli-7001
+  #   build: ./linphone-cli
+  #   image: linphone-cli
+  #   tty: true
+  #   environment:
+  #     TZ: Europe/Rome
+  #     SIP_DOMAIN: 10.10.0.5
+  #     SIP_PROXY: 10.10.0.5
+  #     SIP_USERNAME: 7001
+  #     SIP_PASSWORD: 7001
+  #     AUTOANSWER: "false"
+  #     USE_FILE_AUDIO: "true"
+  #     CLI_AUDIO_FILE: /media/audio_cli.wav
+  #   volumes:
+  #     - linphone_cli_7001_data:/data
+  #     - ./audio_cli.wav:/media/audio_cli.wav:ro
+  #   depends_on:
+  #     - asterisk
+  #   networks:
+  #     lab_net:
+  #       ipv4_address: 10.10.0.31
+
+  # linphone-cli-7002:
+  #   container_name: linphone-cli-7002
+  #   build: ./linphone-cli
+  #   image: linphone-cli
+  #   tty: true
+  #   environment:
+  #     TZ: Europe/Rome
+  #     SIP_DOMAIN: 10.10.0.5
+  #     SIP_PROXY: 10.10.0.5
+  #     SIP_USERNAME: 7002
+  #     SIP_PASSWORD: 7002
+  #     AUTOANSWER: "true"
+  #     USE_FILE_AUDIO: "true"
+  #     CLI_AUDIO_FILE: /media/audio_cli.wav
+  #   volumes:
+  #     - linphone_cli_7002_data:/data
+  #     - ./audio_cli.wav:/media/audio_cli.wav:ro
+  #   depends_on:
+  #     - asterisk
+  #   networks:
+  #     lab_net:
+  #       ipv4_address: 10.10.0.32
+
+  baresip-cli-7001:
+    container_name: baresip-cli-7001
+    build: ./baresip-cli
+    image: baresip-cli
+    tty: true
+    environment:
+      TZ: Europe/Rome
+      SIP_DOMAIN: 10.10.0.5
+      SIP_USERNAME: 7001
+      SIP_PASSWORD: 7001
+      AUTOANSWER: "false"
+      AUDIO_SOURCE_FILE: /media/audio_benign.wav
+    volumes:
+      - baresip_cli_7001_data:/data
+      - ./audio_benign.wav:/media/audio_benign.wav:ro
+      - ./recordings/baresip-cli-7001:/captures
+    depends_on:
+      - asterisk
+    networks:
+      lab_net:
+        ipv4_address: 10.10.0.41
+
+  baresip-cli-7002:
+    container_name: baresip-cli-7002
+    build: ./baresip-cli
+    image: baresip-cli
+    tty: true
+    environment:
+      TZ: Europe/Rome
+      SIP_DOMAIN: 10.10.0.5
+      SIP_USERNAME: 7002
+      SIP_PASSWORD: 7002
+      AUTOANSWER: "true"
+      AUDIO_SOURCE_FILE: /media/audio_benign.wav
+    volumes:
+      - baresip_cli_7002_data:/data
+      - ./audio_benign.wav:/media/audio_benign.wav:ro
+      - ./recordings/baresip-cli-7002:/captures
+    depends_on:
+      - asterisk
+    networks:
+      lab_net:
+        ipv4_address: 10.10.0.42
 
   sippts:
     container_name: sippts
     build: ./sippts
     image: sippts
+    privileged: true
     tty: true
     volumes:
-      - ./audio.wav:/audio.wav        # audio per rtp_inject
+      - ./audio_inject.wav:/audio.wav       # compatibility path for rtpbleedinject
+      - ./audio_inject.wav:/audio_inject.wav
+      - ./audio_fixed.wav:/audio_fixed.wav
+      - ./audio_raw.raw:/audio.raw
+    networks:
+      lab_net:
+        ipv4_address: 10.10.0.20
 
   wireshark:
     container_name: wireshark
     build: ./wireshark
     image: wireshark
     environment:
-    - DISPLAY=${DISPLAY}
-    volumes:
-    - /tmp/.X11-unix:/tmp/.X11-unix  
-    network_mode: "host"            
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Rome
+      PIXELFLUX_WAYLAND: "false"
+    # volumes:
+    #   - wireshark_config:/config
+    network_mode: "service:asterisk"
+    cap_add:
+      - NET_ADMIN
     privileged: true
+    shm_size: "2gb"
+    depends_on:
+      - asterisk
+
+volumes:
+  linphone_7001_config:
+  linphone_7002_config:
+  linphone_cli_7001_data:
+  linphone_cli_7002_data:
+  baresip_cli_7001_data:
+  baresip_cli_7002_data:
+  wireshark_config:
+
+networks:
+  lab_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.0.0/24

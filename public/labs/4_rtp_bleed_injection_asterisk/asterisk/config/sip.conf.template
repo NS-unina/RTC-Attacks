@@ -7,8 +7,8 @@ allow=ulaw
 alwaysauthreject=yes
 directmedia=no
 nat=force_rport,comedia
-localnet=10.10.0.0/24
-externaddr=10.10.0.5
+localnet=__LOCAL_NET__
+externaddr=__EXTERNAL_IP__
 
 [7001]
 type=peer

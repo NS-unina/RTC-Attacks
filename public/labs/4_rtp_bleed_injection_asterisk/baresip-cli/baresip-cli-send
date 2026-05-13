@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+FIFO_PATH=${FIFO_PATH:-/tmp/baresip.fifo}
+
+if [ "$#" -eq 0 ]; then
+  echo "usage: baresip-cli-send <baresip command>" >&2
+  exit 1
+fi
+
+printf '%s\n' "$*" >"$FIFO_PATH"
