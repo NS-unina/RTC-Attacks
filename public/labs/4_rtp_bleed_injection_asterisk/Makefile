@@ -1,4 +1,7 @@
 DOCKER_COMPOSE := $(shell command -v docker-compose 2> /dev/null || echo "docker compose")
+STACK_ID := 4_rtp_bleed_injection_asterisk
+CHECK_AVAILABLE_TAG := RTC_CHECK_AVAILABLE
+DRY_RUN_TAG := RTC_DRY_RUN
 
 SERVICE ?=
 ASTERISK_IP ?= 10.10.0.5
@@ -10,11 +13,13 @@ REPEAT_DELAY_SEC ?= 2
 REPEAT_LOG ?= /tmp/lab4-rtp-repeat.log
 REPEAT_MIN_SUCCESS ?= $(REPEAT_RUNS)
 
-start:
-	@$(DOCKER_COMPOSE) up -d 
+run:
+	@$(DOCKER_COMPOSE) up -d --remove-orphans
+
+start: run
 
 stop:
-	@$(DOCKER_COMPOSE) down
+	@$(DOCKER_COMPOSE) down --remove-orphans
 
 start-wireshark:
 	@docker exec -it wireshark wireshark
@@ -70,7 +75,75 @@ recording-proof-file:
 	@./render-recording-proof.sh "$(FILE)"
 
 build:
-	@$(DOCKER_COMPOSE) build $(SERVICE)
+	@$(DOCKER_COMPOSE) build --no-cache $(SERVICE)
+rebuild:
+	@$(DOCKER_COMPOSE) down --rmi all --remove-orphans || true
+	@$(DOCKER_COMPOSE) build --no-cache $(SERVICE)
+
+is-available:
+	@echo "$(CHECK_AVAILABLE_TAG)_BEGIN stack=$(STACK_ID)"
+	@$(DOCKER_COMPOSE) config -q
+	@SERVICES="$$( $(DOCKER_COMPOSE) config --services )"; \
+	if [ -z "$$SERVICES" ]; then \
+		echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) reason=no_services"; \
+		exit 1; \
+	fi; \
+	for SVC in $$SERVICES; do \
+		CID="$$( $(DOCKER_COMPOSE) ps -q $$SVC )"; \
+		if [ -z "$$CID" ]; then \
+			echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) service=$$SVC reason=not_running"; \
+			exit 1; \
+		fi; \
+		STATE="$$(docker inspect -f '{{.State.Status}}' $$CID)"; \
+		if [ "$$STATE" != "running" ]; then \
+			echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) service=$$SVC reason=unexpected_state state=$$STATE"; \
+			exit 1; \
+		fi; \
+		echo "$(CHECK_AVAILABLE_TAG)_OK stack=$(STACK_ID) service=$$SVC state=$$STATE"; \
+	done; \
+	echo "$(CHECK_AVAILABLE_TAG)_OK stack=$(STACK_ID) all_services=running"
+
+dry-run:
+	@echo "$(DRY_RUN_TAG)_BEGIN stack=$(STACK_ID)"
+	@docker exec asterisk asterisk -rx "sip show settings" 2>/dev/null | grep -Eq 'Externaddr|Externhost' || { \
+		echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=asterisk_sip_settings reason=missing_external_address"; \
+		exit 1; \
+	}
+	@echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) check=asterisk_sip_settings"
+	@i=0; \
+	while [ $$i -lt 20 ]; do \
+		PEER1="$$(docker exec asterisk asterisk -rx 'sip show peer 7001' 2>/dev/null || true)"; \
+		PEER2="$$(docker exec asterisk asterisk -rx 'sip show peer 7002' 2>/dev/null || true)"; \
+		if printf '%s\n' "$$PEER1" | grep -Eq 'Status.*OK' && printf '%s\n' "$$PEER2" | grep -Eq 'Status.*OK'; then \
+			echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) check=baresip_peers_registered"; \
+			break; \
+		fi; \
+		sleep 1; \
+		i=$$((i+1)); \
+		if [ $$i -eq 20 ]; then \
+			echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=baresip_peers_registered reason=timeout"; \
+			exit 1; \
+		fi; \
+	done
+	@$(MAKE) --no-print-directory baresip-hangup >/dev/null 2>&1 || true
+	@$(MAKE) --no-print-directory baresip-call >/dev/null
+	@PORT=""; \
+	i=0; \
+	while [ $$i -lt 10 ]; do \
+		PORT="$$(SRC_IP=$(ASTERISK_IP) ./get-attack-cmd.sh --port-only 2>/dev/null || true)"; \
+		if [ -n "$$PORT" ]; then \
+			break; \
+		fi; \
+		sleep 1; \
+		i=$$((i+1)); \
+	done; \
+	$(MAKE) --no-print-directory baresip-hangup >/dev/null 2>&1 || true; \
+	if [ -z "$$PORT" ]; then \
+		echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=rtp_port_detection reason=no_media_flow"; \
+		exit 1; \
+	fi; \
+	echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) check=rtp_port_detection port=$$PORT"
+	@echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) ready=true"
 
 
 # Build analyzer container

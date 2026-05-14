@@ -1,4 +1,7 @@
 DOCKER_COMPOSE := $(shell command -v docker-compose 2> /dev/null || echo "docker compose")
+STACK_ID := 1_2_sip_spoofing_dos_freeswitch
+CHECK_AVAILABLE_TAG := RTC_CHECK_AVAILABLE
+DRY_RUN_TAG := RTC_DRY_RUN
 
 SERVICE ?= 
 TARGET_IP ?= 10.12.0.5
@@ -18,8 +21,10 @@ REPEAT_DELAY_SEC ?= 2
 REPEAT_LOG ?= /tmp/lab12-repeat.log
 REPEAT_MIN_SUCCESS ?= $(REPEAT_RUNS)
 
-start:
+run:
 	@$(DOCKER_COMPOSE) up -d --remove-orphans
+
+start: run
 
 stop:
 	@$(DOCKER_COMPOSE) down --remove-orphans
@@ -29,6 +34,71 @@ start-attacks:
 
 build:
 	@$(DOCKER_COMPOSE) build $(SERVICE)
+
+rebuild: 
+	@$(DOCKER_COMPOSE) down --rmi all --remove-orphans || true
+	@$(DOCKER_COMPOSE) build --no-cache $(SERVICE)
+
+
+is-available:
+	@echo "$(CHECK_AVAILABLE_TAG)_BEGIN stack=$(STACK_ID)"
+	@$(DOCKER_COMPOSE) config -q
+	@SERVICES="$$( $(DOCKER_COMPOSE) config --services )"; \
+	if [ -z "$$SERVICES" ]; then \
+		echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) reason=no_services"; \
+		exit 1; \
+	fi; \
+	for SVC in $$SERVICES; do \
+		CID="$$( $(DOCKER_COMPOSE) ps -q $$SVC )"; \
+		if [ -z "$$CID" ]; then \
+			echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) service=$$SVC reason=not_running"; \
+			exit 1; \
+		fi; \
+		STATE="$$(docker inspect -f '{{.State.Status}}' $$CID)"; \
+		if [ "$$STATE" != "running" ]; then \
+			echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) service=$$SVC reason=unexpected_state state=$$STATE"; \
+			exit 1; \
+		fi; \
+		HEALTH="$$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' $$CID)"; \
+		if [ -n "$$HEALTH" ] && [ "$$HEALTH" != "healthy" ]; then \
+			echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) service=$$SVC reason=unhealthy health=$$HEALTH"; \
+			exit 1; \
+		fi; \
+		echo "$(CHECK_AVAILABLE_TAG)_OK stack=$(STACK_ID) service=$$SVC state=$$STATE"; \
+	done; \
+	echo "$(CHECK_AVAILABLE_TAG)_OK stack=$(STACK_ID) all_services=running"
+
+dry-run:
+	@echo "$(DRY_RUN_TAG)_BEGIN stack=$(STACK_ID) scenario=$(SCENARIO)"
+	@docker exec attacker sh -lc "test -f /spoofing.py && test -f /dos-sipflood.py" || { \
+		echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=attacker_scripts reason=missing_files"; \
+		exit 1; \
+	}
+	@echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) check=attacker_scripts"
+	@docker exec freeswitch sh -lc "fs_cli -x status >/dev/null" || { \
+		echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=freeswitch_status reason=fs_cli_unavailable"; \
+		exit 1; \
+	}
+	@echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) check=freeswitch_status"
+	@if [ "$(SCENARIO)" = "1" ]; then \
+		i=0; \
+		while [ $$i -lt "$(CLIENT_WAIT_SEC)" ]; do \
+			if docker logs sip-cli-1001 2>&1 | grep -q "REGISTER_OK"; then \
+				echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) check=sip_cli_registered"; \
+				echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) scenario=$(SCENARIO) ready=true"; \
+				exit 0; \
+			fi; \
+			sleep 1; \
+			i=$$((i+1)); \
+		done; \
+		echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=sip_cli_registered reason=timeout"; \
+		exit 1; \
+	elif [ "$(SCENARIO)" = "2" ]; then \
+		echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) scenario=$(SCENARIO) ready=true"; \
+	else \
+		echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=scenario reason=invalid_scenario value=$(SCENARIO)"; \
+		exit 1; \
+	fi
 
 spoof-attack:
 	@echo "[*] Sending spoofed SIP MESSAGE to $(TARGET_EXT) via $(TARGET_IP)..."

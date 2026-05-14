@@ -1,0 +1,14 @@
+# Previous implementation (kept for traceability):
+# No DNS configuration file existed because UDP probing was implemented via
+# synthetic netcat listeners.
+#
+# Updated implementation:
+# Minimal CoreDNS setup for realistic UDP/53 service probing.
+# - `errors`: explicit runtime errors in logs
+# - `log`: request visibility during debugging
+# - `whoami`: deterministic response for DNS A/AAAA queries
+. {
+    errors
+    log
+    whoami
+}

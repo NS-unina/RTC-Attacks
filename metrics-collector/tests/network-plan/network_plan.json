@@ -1,0 +1,40 @@
+[
+  {
+    "previous_implementation": {
+      "reason": "Kept for traceability; ignored by parser because it has no active `container` key.",
+      "container": "attacker",
+      "probed_services": [
+        {
+          "container": "target",
+          "port": "5060",
+          "type": "tcp"
+        },
+        {
+          "container": "target",
+          "port": "5061",
+          "type": "udp"
+        }
+      ]
+    }
+  },
+  {
+    "container": "attacker",
+    "probed_services": [
+      {
+        "container": "httpd_frontend",
+        "port": "80",
+        "type": "tcp"
+      },
+      {
+        "container": "httpd_backend",
+        "port": "80",
+        "type": "tcp"
+      },
+      {
+        "container": "dns_resolver",
+        "port": "53",
+        "type": "udp"
+      }
+    ]
+  }
+]

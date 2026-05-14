@@ -314,6 +314,7 @@ class MetricsCollector:
 def main():
     """Esempio di utilizzo"""
     collector = MetricsCollector(output_dir="metrics")
+    print("[*] Collecting deployment timing...")
     
     # Test deployment timing
     # metrics = collector.collect_deployment_timing("4_rtp_bleed_injection_asterisk")

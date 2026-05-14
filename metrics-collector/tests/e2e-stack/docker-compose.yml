@@ -1,0 +1,39 @@
+services:
+  # Previous implementation (kept for traceability):
+  # attacker:
+  #   image: alpine:3.20
+  #   command: ["sh", "-lc", "sleep infinity"]
+  #
+  # Updated implementation:
+  # Keep attacker container minimal and stable to avoid startup races caused by
+  # runtime package installation. Traffic generation uses built-in utilities.
+  attacker:
+    image: alpine:3.20
+    command: ["sh", "-lc", "sleep infinity"]
+
+  # Previous implementation (kept for traceability):
+  # target:
+  #   image: alpine:3.20
+  #   command:
+  #     [
+  #       "sh",
+  #       "-lc",
+  #       "apk add --no-cache netcat-openbsd >/dev/null && (while true; do nc -l -k -p 5060 >/dev/null 2>&1; done) & (while true; do nc -u -l -k -p 5061 >/dev/null 2>&1; done) & sleep infinity",
+  #     ]
+  #
+  # Updated implementation:
+  # Replace synthetic netcat listeners with real services:
+  # - two independent HTTP daemons (TCP/80)
+  # - one lightweight DNS daemon (UDP/53)
+  # This gives more realistic service behavior for e2e probing.
+  httpd_frontend:
+    image: httpd:2.4-alpine
+
+  httpd_backend:
+    image: httpd:2.4-alpine
+
+  dns_resolver:
+    image: coredns/coredns:1.11.3
+    command: ["-conf", "/etc/coredns/Corefile"]
+    volumes:
+      - ./coredns/Corefile:/etc/coredns/Corefile:ro
