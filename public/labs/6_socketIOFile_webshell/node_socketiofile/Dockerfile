@@ -7,7 +7,7 @@ RUN apt-get update -y \
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm i express http socket.io socket.io-file@2.0.31 path
+RUN npm i express http socket.io socket.io-file@2.0.31 path multer
 COPY . .
 
 CMD ["node", "server.js"]

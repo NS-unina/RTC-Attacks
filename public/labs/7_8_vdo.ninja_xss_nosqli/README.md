@@ -8,6 +8,17 @@
 ## Description
 In this scenario, by inserting specific input values, it is possible to bypass login controls and access the VDO.Ninja platform. Then, using a particular query string, sensitive information (e.g., cookies) can be extracted.
 
+### Quick automation with Makefile
+To test the scenario, you can run:
+```bash
+make run-nuclei
+```
+
+This will:
+1. Build the Nuclei image;
+2. Run Nuclei;
+3. Use the custom template to check whether the vulnerability is present.
+
 ## How to reproduce the issue - NoSQLi
 The web page is accessed through a browser at: ```http://localhost:9000```. In the vulnerable versions, the ```_bsontype``` attribute is ignored by server, and therefore by entering any username or password, access is granted:
 

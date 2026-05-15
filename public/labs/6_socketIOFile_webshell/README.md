@@ -7,6 +7,25 @@
 In this scenario, it is possible to upload a malicious javaScript file to execute a webshell on the victim machine.
 Once this is done, the attacker loads the python ransomware file from his HTTP server and executes it through the webshell. The effect is the encryption of the files on the victim machine.
 
+
+### Quick automation with Makefile
+To test the scenario, you can run:
+```bash
+make start-attack
+```
+
+This will:
+1. Upload ```webshell.js``` file;
+2. Download rthe ansomware file via remote access;
+3. Execute the ransomware.
+
+Using:
+```bash
+make check-attack
+```
+
+you can verify whether the ransomware attack was successful.
+
 ## How to reproduce the issue
 As a first step, access ```http://localhost:8080```:
 
