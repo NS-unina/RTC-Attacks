@@ -1,0 +1,44 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.11.3
+    container_name: prometheus-server
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+  grafana:
+      image: grafana/grafana:13.1.0-25893932881-ubuntu
+      container_name: grafana-server
+      ports:
+        - "3000:3000"
+      environment:
+        - GF_SECURITY_ADMIN_PASSWORD=admin  # Password iniziale per il login
+      restart: unless-stopped
+      volumes:
+        - grafana-data:/var/lib/grafana
+  loki:
+      image: grafana/loki:3.7.2
+      container_name: loki-server
+      ports:
+        - "3100:3100" # Porta su cui riceverà i log da Alloy
+      command: -config.file=/etc/loki/local-config.yaml
+      restart: unless-stopped
+      volumes:
+        - loki-data:/loki
+  pushgateway:
+    image: prom/pushgateway:v1.11.2
+    container_name: prometheus-pushgateway
+    ports:
+      - "9091:9091"
+    restart: unless-stopped
+
+
+
+
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:
