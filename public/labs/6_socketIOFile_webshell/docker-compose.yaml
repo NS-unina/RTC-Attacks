@@ -1,8 +1,31 @@
 services:
   node_socketiofile:
-    container_name: node_socketiofile
     build: ./node_socketiofile
     image: node_socketiofile
     tty: true
-    ports:
-      - 8080:8080
+    # ports:
+    # - ${HTTP_PORT:-8080}:8080
+    networks:
+      lab_net:
+        ipv4_address: ${VICTIM_IP:-10.16.0.10}
+    volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
+  attacker:
+    image: ${ATTACKER_IMAGE:-curlimages/curl:8.8.0}
+    tty: true
+    command: sleep infinity
+    depends_on:
+    - node_socketiofile
+    networks:
+      lab_net:
+        ipv4_address: ${ATTACKER_IP:-10.16.0.100}
+    volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
+networks:
+  lab_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: ${LAB_SUBNET:-10.16.0.0/24}

@@ -1,17 +1,34 @@
-DOCKER_COMPOSE := $(shell command -v docker-compose 2> /dev/null || echo "docker compose")
 STACK_ID := 1_2_sip_spoofing_dos_freeswitch
-CHECK_AVAILABLE_TAG := RTC_CHECK_AVAILABLE
-DRY_RUN_TAG := RTC_DRY_RUN
 
-SERVICE ?= 
-TARGET_IP ?= 10.12.0.5
+include ../shared.mk
+COMPOSE_PROJECT_NAME ?= $(STACK_ID)$(if $(filter default,$(INSTANCE)),,_$(INSTANCE))
+COMPOSE := COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) $(DOCKER_COMPOSE)
+
+NET_PREFIX ?= 10.12.$(INSTANCE_INDEX)
+LAB_SUBNET ?= $(NET_PREFIX).0/24
+FREESWITCH_IP ?= $(NET_PREFIX).5
+ATTACKER_IP ?= $(NET_PREFIX).20
+CLIENT_IP ?= $(NET_PREFIX).31
+TARGET_IP ?= $(FREESWITCH_IP)
 TARGET_EXT ?= 1001
 SCENARIO ?= 1
+
+# Ground truth metadata for IDS evaluation (scenario-specific)
+ifeq ($(SCENARIO),1)
+EXPECTED_SIDS := 2000001
+ATTACK_TYPE := sip_spoofing
+else ifeq ($(SCENARIO),2)
+EXPECTED_SIDS := 2000002
+ATTACK_TYPE := sip_register_flood
+else
+EXPECTED_SIDS := 
+ATTACK_TYPE := 
+endif
+
 SIP_SERVER ?= $(TARGET_IP)
 CLIENT_EXT ?= $(TARGET_EXT)
 CLIENT_PASS ?= 1234
 CLIENT_WAIT_SEC ?= 25
-CLIENT_IP ?= 10.12.0.31
 CLIENT_PORT ?= 5062
 DOS_CHECK_TIMEOUT_SEC ?= 180
 DOS_CHECK_INTERVAL_SEC ?= 2
@@ -21,61 +38,39 @@ REPEAT_DELAY_SEC ?= 2
 REPEAT_LOG ?= /tmp/lab12-repeat.log
 REPEAT_MIN_SUCCESS ?= $(REPEAT_RUNS)
 
-run:
-	@$(DOCKER_COMPOSE) up -d --remove-orphans
+export LAB_SUBNET FREESWITCH_IP ATTACKER_IP CLIENT_IP SIP_SERVER CLIENT_EXT CLIENT_PASS CLIENT_PORT
 
-start: run
-
-stop:
-	@$(DOCKER_COMPOSE) down --remove-orphans
-
-start-attacks:
-	@docker exec -it attacker sh
-
-build:
-	@$(DOCKER_COMPOSE) build $(SERVICE)
-
-rebuild: 
-	@$(DOCKER_COMPOSE) down --rmi all --remove-orphans || true
-	@$(DOCKER_COMPOSE) build --no-cache $(SERVICE)
+start: stop 
+	@$(COMPOSE) up -d --remove-orphans
 
 
-is-available:
-	@echo "$(CHECK_AVAILABLE_TAG)_BEGIN stack=$(STACK_ID)"
-	@$(DOCKER_COMPOSE) config -q
-	@SERVICES="$$( $(DOCKER_COMPOSE) config --services )"; \
-	if [ -z "$$SERVICES" ]; then \
-		echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) reason=no_services"; \
+attack: 
+	@if [ "$(SCENARIO)" = "1" ]; then \
+		$(MAKE) client-up SIP_SERVER="$(SIP_SERVER)" CLIENT_EXT="$(CLIENT_EXT)" CLIENT_PASS="$(CLIENT_PASS)"; \
+		$(MAKE) client-wait-registered CLIENT_EXT="$(CLIENT_EXT)" CLIENT_WAIT_SEC="$(CLIENT_WAIT_SEC)"; \
+		$(MAKE) spoof-attack TARGET_IP="$(TARGET_IP)" TARGET_EXT="$(TARGET_EXT)"; \
+		sleep 2; \
+		$(MAKE) client-check-spoof; \
+	elif [ "$(SCENARIO)" = "2" ]; then \
+		$(MAKE) dos-start TARGET_IP="$(TARGET_IP)"; \
+		$(MAKE) dos-check; \
+	else \
+		echo "[!] Invalid SCENARIO=$(SCENARIO). Use 1 (spoofing) or 2 (dos)."; \
 		exit 1; \
-	fi; \
-	for SVC in $$SERVICES; do \
-		CID="$$( $(DOCKER_COMPOSE) ps -q $$SVC )"; \
-		if [ -z "$$CID" ]; then \
-			echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) service=$$SVC reason=not_running"; \
-			exit 1; \
-		fi; \
-		STATE="$$(docker inspect -f '{{.State.Status}}' $$CID)"; \
-		if [ "$$STATE" != "running" ]; then \
-			echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) service=$$SVC reason=unexpected_state state=$$STATE"; \
-			exit 1; \
-		fi; \
-		HEALTH="$$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' $$CID)"; \
-		if [ -n "$$HEALTH" ] && [ "$$HEALTH" != "healthy" ]; then \
-			echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) service=$$SVC reason=unhealthy health=$$HEALTH"; \
-			exit 1; \
-		fi; \
-		echo "$(CHECK_AVAILABLE_TAG)_OK stack=$(STACK_ID) service=$$SVC state=$$STATE"; \
-	done; \
-	echo "$(CHECK_AVAILABLE_TAG)_OK stack=$(STACK_ID) all_services=running"
+	fi
+	$(MAKE) stop
+
+
+
 
 dry-run:
 	@echo "$(DRY_RUN_TAG)_BEGIN stack=$(STACK_ID) scenario=$(SCENARIO)"
-	@docker exec attacker sh -lc "test -f /spoofing.py && test -f /dos-sipflood.py" || { \
+	@$(COMPOSE) exec -T attacker sh -lc "test -f /spoofing.py && test -f /dos-sipflood.py" || { \
 		echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=attacker_scripts reason=missing_files"; \
 		exit 1; \
 	}
 	@echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) check=attacker_scripts"
-	@docker exec freeswitch sh -lc "fs_cli -x status >/dev/null" || { \
+	@$(COMPOSE) exec -T freeswitch sh -lc "fs_cli -x status >/dev/null" || { \
 		echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=freeswitch_status reason=fs_cli_unavailable"; \
 		exit 1; \
 	}
@@ -83,7 +78,7 @@ dry-run:
 	@if [ "$(SCENARIO)" = "1" ]; then \
 		i=0; \
 		while [ $$i -lt "$(CLIENT_WAIT_SEC)" ]; do \
-			if docker logs sip-cli-1001 2>&1 | grep -q "REGISTER_OK"; then \
+			if $(COMPOSE) logs sip-cli-1001 2>&1 | grep -q "REGISTER_OK"; then \
 				echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) check=sip_cli_registered"; \
 				echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) scenario=$(SCENARIO) ready=true"; \
 				exit 0; \
@@ -102,24 +97,24 @@ dry-run:
 
 spoof-attack:
 	@echo "[*] Sending spoofed SIP MESSAGE to $(TARGET_EXT) via $(TARGET_IP)..."
-	@docker exec attacker python3 /spoofing.py "$(TARGET_IP)" "$(TARGET_EXT)"
+	@$(COMPOSE) exec -T attacker python3 /spoofing.py "$(TARGET_IP)" "$(TARGET_EXT)"
 	@echo "[+] Spoofing packet sent."
 
 client-up:
 	@echo "[*] Starting legit SIP client $(CLIENT_EXT) against $(SIP_SERVER)..."
-	@SIP_SERVER="$(SIP_SERVER)" CLIENT_EXT="$(CLIENT_EXT)" CLIENT_PASS="$(CLIENT_PASS)" CLIENT_IP="$(CLIENT_IP)" CLIENT_PORT="$(CLIENT_PORT)" $(DOCKER_COMPOSE) up -d sip-cli-1001
+	@SIP_SERVER="$(SIP_SERVER)" CLIENT_EXT="$(CLIENT_EXT)" CLIENT_PASS="$(CLIENT_PASS)" CLIENT_IP="$(CLIENT_IP)" CLIENT_PORT="$(CLIENT_PORT)" $(COMPOSE) up -d sip-cli-1001
 
 client-logs:
-	@docker logs --tail 120 sip-cli-1001
+	@$(COMPOSE) logs --tail 120 sip-cli-1001
 
 client-watch:
-	@docker logs -f sip-cli-1001
+	@$(COMPOSE) logs -f sip-cli-1001
 
 client-wait-registered:
 	@echo "[*] Waiting for registration success from SIP CLI (timeout: $(CLIENT_WAIT_SEC)s)..."
 	@i=0; \
 	while [ $$i -lt "$(CLIENT_WAIT_SEC)" ]; do \
-		if docker logs sip-cli-1001 2>&1 | grep -q "REGISTER_OK"; then \
+		if $(COMPOSE) logs sip-cli-1001 2>&1 | grep -q "REGISTER_OK"; then \
 			echo "[+] Client $(CLIENT_EXT) registered."; \
 			exit 0; \
 		fi; \
@@ -132,7 +127,7 @@ client-wait-registered:
 
 client-check-spoof:
 	@echo "[*] Checking client log for spoofed UniCredit message..."
-	@if docker logs sip-cli-1001 2>&1 | grep -Eiq "\\[INCOMING_MESSAGE\\].*(UniCredit|withdrawal of|withdrawal)"; then \
+	@if $(COMPOSE) logs sip-cli-1001 2>&1 | grep -Eiq "\\[INCOMING_MESSAGE\\].*(UniCredit|withdrawal of|withdrawal)"; then \
 		echo "[+] Spoofing evidence found in sip-cli-1001 logs."; \
 	else \
 		echo "[!] No spoofing evidence found in logs yet."; \
@@ -142,16 +137,16 @@ client-check-spoof:
 
 dos-start:
 	@echo "[*] Starting SIP flood against $(TARGET_IP) in background..."
-	@docker exec -d attacker sh -lc "python3 /dos-sipflood.py '$(TARGET_IP)' >/tmp/dos.log 2>&1"
+	@$(COMPOSE) exec -d attacker sh -lc "python3 /dos-sipflood.py '$(TARGET_IP)' >/tmp/dos.log 2>&1"
 	@echo "[+] DoS flood started. Use 'make dos-stop' to stop it."
 
 dos-stop:
 	@echo "[*] Stopping SIP flood in attacker container..."
-	@docker exec attacker sh -lc "ps -eo pid,args | grep '[d]os-sipflood.py' | awk '{print \$$1}' | xargs -r kill -TERM || true"
+	@$(COMPOSE) exec -T attacker sh -lc "ps -eo pid,args | grep '[d]os-sipflood.py' | awk '{print \$$1}' | xargs -r kill -TERM || true"
 	@echo "[+] DoS flood stopped (if it was running)."
 
 dos-logs:
-	@docker exec attacker sh -lc "tail -n 40 /tmp/dos.log 2>/dev/null || echo 'No /tmp/dos.log yet'"
+	@$(COMPOSE) exec -T attacker sh -lc "tail -n 40 /tmp/dos.log 2>/dev/null || echo 'No /tmp/dos.log yet'"
 
 dos-check:
 	@echo "[*] Monitoring FreeSWITCH memory for DoS impact..."
@@ -161,8 +156,9 @@ dos-check:
 	limit=$$(( $(DOS_CHECK_TIMEOUT_SEC) / $(DOS_CHECK_INTERVAL_SEC) )); \
 	while [ $$i -le $$limit ]; do \
 		TS=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
-		STATUS=$$(docker inspect -f '{{.State.Status}}' freeswitch 2>/dev/null || echo "not_found"); \
-		MEM=$$(docker stats --no-stream --format '{{.MemUsage}}' freeswitch 2>/dev/null || echo "n/a"); \
+		CID="$$( $(COMPOSE) ps -q freeswitch )"; \
+		STATUS=$$(docker inspect -f '{{.State.Status}}' $$CID 2>/dev/null || echo "not_found"); \
+		MEM=$$(docker stats --no-stream --format '{{.MemUsage}}' $$CID 2>/dev/null || echo "n/a"); \
 		echo "$$TS status=$$STATUS mem=$$MEM" | tee -a "$(DOS_MEM_LOG)"; \
 		if [ "$$STATUS" != "running" ]; then \
 			echo "[+] DoS success: freeswitch container status is '$$STATUS'."; \
@@ -177,22 +173,37 @@ dos-check:
 	tail -n 10 "$(DOS_MEM_LOG)" || true; \
 	exit 1
 
+
 auto-attack: stop build start
+	@$(RTC_EVENT) lab_ready stack=$(STACK_ID) scenario=$(SCENARIO) instance=$(INSTANCE) \
+		attacker_ip=$(ATTACKER_IP) victim_ip=$(TARGET_IP) \
+		expected_sids=$(EXPECTED_SIDS) attack_type=$(ATTACK_TYPE) \
+		probe_targets=$(ATTACKER_IP),$(TARGET_IP) probe_protocols=tcp,udp,icmp
 	@echo "[*] Waiting for containers (3 seconds)..."
 	@sleep 3
 	@if [ "$(SCENARIO)" = "1" ]; then \
 		$(MAKE) client-up SIP_SERVER="$(SIP_SERVER)" CLIENT_EXT="$(CLIENT_EXT)" CLIENT_PASS="$(CLIENT_PASS)"; \
 		$(MAKE) client-wait-registered CLIENT_EXT="$(CLIENT_EXT)" CLIENT_WAIT_SEC="$(CLIENT_WAIT_SEC)"; \
+			   $(RTC_EVENT) attack_start stack=$(STACK_ID) scenario=1 instance=$(INSTANCE) attack=sip_spoofing attacker_ip=$(ATTACKER_IP) victim_ip=$(TARGET_IP); \
+		echo "$(ATTACK_WINDOW_TAG)_BEGIN ts_utc=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") stack=$(STACK_ID) scenario=1 instance=$(INSTANCE) attack=sip_spoofing"; \
 		$(MAKE) spoof-attack TARGET_IP="$(TARGET_IP)" TARGET_EXT="$(TARGET_EXT)"; \
 		sleep 2; \
 		$(MAKE) client-check-spoof; \
+		$(RTC_EVENT) attack_end stack=$(STACK_ID) scenario=1 instance=$(INSTANCE) attack=sip_spoofing; \
+		echo "$(ATTACK_WINDOW_TAG)_END ts_utc=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") stack=$(STACK_ID) scenario=1 instance=$(INSTANCE) attack=sip_spoofing"; \
 	elif [ "$(SCENARIO)" = "2" ]; then \
+			   $(RTC_EVENT) attack_start stack=$(STACK_ID) scenario=2 instance=$(INSTANCE) attack=sip_flood attacker_ip=$(ATTACKER_IP) victim_ip=$(TARGET_IP); \
+		echo "$(ATTACK_WINDOW_TAG)_BEGIN ts_utc=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") stack=$(STACK_ID) scenario=2 instance=$(INSTANCE) attack=sip_flood"; \
 		$(MAKE) dos-start TARGET_IP="$(TARGET_IP)"; \
 		$(MAKE) dos-check; \
+		$(RTC_EVENT) attack_end stack=$(STACK_ID) scenario=2 instance=$(INSTANCE) attack=sip_flood; \
+		echo "$(ATTACK_WINDOW_TAG)_END ts_utc=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") stack=$(STACK_ID) scenario=2 instance=$(INSTANCE) attack=sip_flood"; \
 	else \
 		echo "[!] Invalid SCENARIO=$(SCENARIO). Use 1 (spoofing) or 2 (dos)."; \
 		exit 1; \
 	fi
+	@$(RTC_EVENT) lab_stop stack=$(STACK_ID) scenario=$(SCENARIO) instance=$(INSTANCE)
+	$(MAKE) stop
 
 repeat-check:
 	@echo "[*] Repetition test for scenario $(SCENARIO)"
@@ -202,7 +213,7 @@ repeat-check:
 	@PASS=0; FAIL=0; i=1; \
 	while [ $$i -le "$(REPEAT_RUNS)" ]; do \
 		echo "========== RUN $$i/$(REPEAT_RUNS) ==========" | tee -a "$(REPEAT_LOG)"; \
-		if $(MAKE) --no-print-directory auto-attack \
+		if $(MAKE) auto-attack \
 			SCENARIO="$(SCENARIO)" \
 			TARGET_IP="$(TARGET_IP)" \
 			TARGET_EXT="$(TARGET_EXT)" \

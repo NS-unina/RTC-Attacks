@@ -1,0 +1,43 @@
+{
+  "_comment": "Centralized default configuration for experiment parameters",
+
+
+  "pushgateway": {
+    "url": "http://10.9.0.5:9091"
+  },
+  
+  "timing": {
+    "alert_window_post_sec": 5.0,
+    "alert_window_pre_sec": 0.0,
+    "timeline_bin_sec": 1.0,
+    "match_window_sec": 3.0,
+    "ids_warmup_sec": 2.0,
+    "ids_cooldown_sec": 2.0
+  },
+  
+  "experiment1_baseline": {
+    "repetitions": 30,
+    "default_scenarios": "1,2,3,4,5,6,7,8,9",
+    "monitoring_enabled": true
+  },
+  
+  "experiment2_scalability": {
+    "interval_sec": 0.5,
+    "default_scenario_id": 1
+  },
+  
+  "experiment3_robustness": {
+    "default_scenarios": "1,2,3,4,5,6,7,8,9"
+  },
+  
+  "collection_check": {
+    "parallel_workers": 6,
+    "max_instances": 1
+  },
+  
+  "paths": {
+    "suricata_image": "suricata-rtc",
+    "suricata_rules": "/etc/suricata/local.rules",
+    "results_dir" : "results"
+  }
+}

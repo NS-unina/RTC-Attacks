@@ -390,6 +390,7 @@
       </div>
       <div id="scenario-container"></div>
       <div class="top-controls">
+        <input id="stack-instance" class="search-bar" style="display:none; width:160px;" value="default" title="Compose stack instance">
         <button id="btn-start" class="btn"style="display:none;">Start</button>
         <button id="btn-stop" class="btn" style="display:none;">Stop</button>
       </div>
@@ -409,6 +410,7 @@
   <script>
     const startMachine = document.querySelector("#btn-start");
     const stopMachine = document.querySelector("#btn-stop");
+    const stackInstanceInput = document.querySelector("#stack-instance");
     const vmStatus = document.querySelector("#vm-status");
     const vmContainer = document.querySelector("#vm-container");
     const cloudPanel = document.querySelector(".cloud-panel");
@@ -437,7 +439,8 @@
       5: "5_coturn_access_bypass",
       6: "6_socketIOFile_webshell",
       7: "7_8_vdo.ninja_xss_nosqli",
-      8: "9_firefox_access_cam_web",
+      8: "7_8_vdo.ninja_xss_nosqli",
+      9: "9_firefox_access_cam_web",
     }
     const contentArea = document.querySelector(".content");
 
@@ -508,6 +511,7 @@
             notyf.success("No images to build");
             setTimeout(() => document.querySelector("#container-scenario-selected-"+ ID).remove(), 1000);
             setTimeout(() => document.getElementById("btn-start").style.display = "inline-block", 1000);
+            setTimeout(() => stackInstanceInput.style.display = "inline-block", 1000);
             return;
           }
           
@@ -566,6 +570,7 @@
                     document.querySelector("#container-scenario-selected-"+ ID).classList.add("fade-out");
                     setTimeout(() => document.querySelector("#container-scenario-selected-"+ ID).remove(), 400);
                     document.getElementById("btn-start").style.display = "inline-block";
+                    stackInstanceInput.style.display = "inline-block";
                   }
                 }, 400);
               } catch (err) {
@@ -613,6 +618,7 @@
               document.querySelector("#container-scenario-selected-"+ ID).classList.add("fade-out");
               setTimeout(() => document.querySelector("#container-scenario-selected-"+ ID).remove(), 400);
               document.getElementById("btn-start").style.display = "inline-block";
+              stackInstanceInput.style.display = "inline-block";
             } catch (err) {
               notyf.error("Error: " + err);
             } 
@@ -659,6 +665,11 @@
                 .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
     }
 
+    function selectedInstance() {
+      const rawValue = stackInstanceInput.value.trim() || "default";
+      return rawValue.replace(/[^A-Za-z0-9_.-]/g, "");
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       getAllScenarios();
     });    
@@ -691,6 +702,7 @@
     startMachine.addEventListener("click", async () => {        
       cloudPanel.classList.remove("hidden");
       startMachine.style.display = "none";
+      stackInstanceInput.style.display = "none";
       stopMachine.style.display = "inline-block";
 
       vmStatus.className = "";
@@ -703,7 +715,8 @@
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            folder: folders[ID]
+            folder: folders[ID],
+            instance: selectedInstance()
           })
         })
 
@@ -761,7 +774,8 @@
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            folder: folders[ID]
+            folder: folders[ID],
+            instance: selectedInstance()
           })
         })
         
@@ -786,6 +800,7 @@
 
         cloudPanel.classList.add("hidden");
         startMachine.style.display = "inline-block";
+        stackInstanceInput.style.display = "inline-block";
         stopMachine.style.display = "none"; 
         notyf.success("Containers stopped");
 

@@ -49,6 +49,10 @@ When the build is complete, you can start the web application as described above
 
 After that you can connect at: ```http://localhost:8888```
 
+## IDS Pipeline
+For the unified experiment workflow, see:
+
+- [docs/EXPERIMENTS.md](/mnt/hdd/git/Unina/RTC-Attacks/docs/EXPERIMENTS.md)
 
 # Disclaimer
 

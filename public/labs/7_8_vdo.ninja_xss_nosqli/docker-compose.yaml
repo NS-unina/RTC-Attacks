@@ -1,14 +1,61 @@
 services:
   vdoninja:
-    container_name: vdoninja
     build: ./vdoninja
     image: vdoninja
-    network_mode: "host"
-
+    # ports:
+    # - ${VDONINJA_HTTP_PORT:-18080}:18080
+    networks:
+      lab_net:
+        ipv4_address: ${VDONINJA_IP:-10.17.0.11}
+    volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
   node_mongoose:
-    container_name: node_mongoose
     build: ./node_mongoose
     image: node_mongoose
     tty: true
-    network_mode: "host"
+    # ports:
+    # - ${MONGOOSE_HTTP_PORT:-9000}:9000
+    environment:
+      MONGO_URL: mongodb://root:example@mongo:27017/rtc_attacks?authSource=admin
+      VDONINJA_PUBLIC_URL: ${VDONINJA_PUBLIC_URL:-http://localhost:18080}
+    depends_on:
+    - mongo
     restart: always
+    networks:
+      lab_net:
+        ipv4_address: ${MONGOOSE_IP:-10.17.0.10}
+    volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
+  mongo:
+    image: mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    networks:
+      lab_net:
+        ipv4_address: ${MONGO_IP:-10.17.0.12}
+    volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
+  attacker:
+    image: ${ATTACKER_IMAGE:-curlimages/curl:8.8.0}
+    tty: true
+    command: sleep infinity
+    depends_on:
+    - node_mongoose
+    - vdoninja
+    networks:
+      lab_net:
+        ipv4_address: ${ATTACKER_IP:-10.17.0.100}
+    volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
+networks:
+  lab_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: ${LAB_SUBNET:-10.17.0.0/24}

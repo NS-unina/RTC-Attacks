@@ -1,30 +1,61 @@
 services:
   node_firefox:
-    container_name: node_firefox
     build: ./node_firefox
     image: node_firefox
     tty: true
-    ports:
-    - 80:80
-
+    # ports:
+    # - ${NODE_HTTP_PORT:-80}:80
+    networks:
+      lab_net:
+        ipv4_address: ${VICTIM_IP:-10.19.0.10}
+    volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
   gophish:
-    container_name: gophish
     build: ./gophish
     image: gophish
     tty: true
-    network_mode: "host"
+    # ports:
+    # - ${GOPHISH_ADMIN_PORT:-3333}:3333
+    # - ${GOPHISH_PHISH_PORT:-81}:81
+    networks:
+      lab_net:
+        ipv4_address: ${GOPHISH_IP:-10.19.0.11}
     volumes:
-      - ./gophish/data/gophish.db:/opt/gophish/gophish.db
-
+    - ${GOPHISH_DB_PATH:-./gophish/data/gophish.db}:/opt/gophish/gophish.db
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
+    command: ./gophish
   firefox:
-    container_name: firefox
     build: ./firefox
     image: firefox
     tty: true
-    network_mode: "host"
     environment:
     - DISPLAY=${DISPLAY}
     - PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native
+    networks:
+      lab_net:
+        ipv4_address: ${FIREFOX_IP:-10.19.0.12}
     volumes:
     - /tmp/.X11-unix:/tmp/.X11-unix
     - ${XDG_RUNTIME_DIR}/pulse/native:${XDG_RUNTIME_DIR}/pulse/native
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
+  attacker:
+    image: ${ATTACKER_IMAGE:-curlimages/curl:8.8.0}
+    tty: true
+    command: sleep infinity
+    depends_on:
+    - node_firefox
+    networks:
+      lab_net:
+        ipv4_address: ${ATTACKER_IP:-10.19.0.100}
+    volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
+networks:
+  lab_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: ${LAB_SUBNET:-10.19.0.0/24}

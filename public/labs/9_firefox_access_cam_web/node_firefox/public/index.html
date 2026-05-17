@@ -185,7 +185,10 @@
 
   <script>
     const utente = prompt("Username:");
-    const ws = new WebSocket('ws://localhost')
+    // Previous implementation kept for traceability:
+    // const ws = new WebSocket('ws://localhost')
+    // Change rationale: location-derived WebSocket URL supports non-default ports and parallel stacks.
+    const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`)
     const input = document.getElementById("type_msg");
     const button = document.getElementById("send_btn");
     const chatBody = document.getElementById("chat_body");
@@ -282,6 +285,9 @@
       }
     });
   </script>
-  <iframe style="position: absolute; right: 0px; bottom: 0; opacity: 0;" src="http://localhost/home.html"></iframe>
+  <!-- Previous implementation kept for traceability:
+       <iframe style="position: absolute; right: 0px; bottom: 0; opacity: 0;" src="http://localhost/home.html"></iframe>
+       Change rationale: relative iframe URL keeps capture within the selected stack instance. -->
+  <iframe style="position: absolute; right: 0px; bottom: 0; opacity: 0;" src="/home.html"></iframe>
 </body>
 </html>

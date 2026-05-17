@@ -1,0 +1,43 @@
+# -----------------------------------------------------------------------------
+# RTC-Attacks Suricata rules
+# -----------------------------------------------------------------------------
+# Converted from Snort local_v2.rules for Suricata compatibility
+
+# Scenario 1: SIP spoofing (UniCredit forged sender)
+alert sip any any -> any 5060 (msg:"RTC SIP spoofing UniCredit sender detected"; flow:to_server; content:"MESSAGE sip:"; nocase; content:"From:"; nocase; content:"UniCredit"; nocase; classtype:attempted-user; metadata:service sip, attack_type sip_spoofing; sid:2000001; rev:2;)
+
+# Scenario 2: SIP REGISTER flood
+# Previous implementation: threshold:type threshold, track by_src, count 150, seconds 5 (generated 19,300 alerts for single 15-sec attack)
+# Change rationale: use type limit to generate max 1 alert per time window instead of 1 alert every 150 packets, reducing alert storm while preserving detection
+# Previous implementation kept for traceability:
+# alert sip any any -> any 5060 (msg:"RTC SIP REGISTER flood detected"; flow:to_server; content:"REGISTER sip:"; nocase; content:"Via:"; nocase; threshold:type limit, track by_src, count 150, seconds 30; classtype:attempted-dos; metadata:service sip, attack_type sip_register_flood; sid:2000002; rev:3;)
+# Change rationale: `type limit` with `count 150` still allows up to 150 alerts in 30 seconds and can fire on normal scenario-1 SIP REGISTER traffic.
+# Updated implementation: `type both` requires at least 150 matches before alerting, and then limits alert volume to max 1 alert every 30 seconds per source.
+alert sip any any -> any 5060 (msg:"RTC SIP REGISTER flood detected"; flow:to_server; content:"REGISTER sip:"; nocase; content:"Via:"; nocase; threshold:type both, track by_src, count 150, seconds 30; classtype:attempted-dos; metadata:service sip, attack_type sip_register_flood; sid:2000002; rev:4;)
+
+# Scenario 3: SIP overflow pattern (very long tag)
+# Previous implementation: pcre:"/tag=.{80,}/smi" (flag /s made dot match newlines, causing false positives)
+# Change rationale: use [^\r\n]{80,} to match only 80+ chars on same line, avoiding Authorization headers spanning multiple lines
+alert sip any any -> any 5060 (msg:"RTC SIP overflow-like long tag detected"; flow:to_server; content:"REGISTER sip:"; nocase; content:"From:"; nocase; pcre:"/tag=[^\r\n]{80,}/mi"; classtype:attempted-admin; metadata:service sip, attack_type sip_overflow; sid:2000003; rev:3;)
+
+# Scenario 4: RTP injection/high-rate RTP anomaly in attack port range
+# Supports default range 10000-10099 and multi-instance mapped ranges 11100-11999.
+alert udp any any -> any 10000:11999 (msg:"RTC RTP injection/high-rate anomaly detected"; byte_test:1,&,0x80,0; dsize:>80; threshold:type threshold, track by_src, count 120, seconds 3; classtype:attempted-user; metadata:service rtp, attack_type rtp_injection; sid:2000004; rev:2;)
+
+# Scenario 5: TURN relay abuse pattern (TURN over TCP + XOR-PEER-ADDRESS IPv6)
+alert tcp any any -> any 3478 (msg:"RTC TURN IPv6 peer-address relay abuse pattern detected"; flow:to_server,established; content:"|00 12|"; content:"|00 14 00 02|"; distance:0; within:8; content:"username1"; nocase; classtype:attempted-recon; metadata:service stun, attack_type coturn_access_bypass; sid:2000005; rev:2;)
+
+# Scenario 6: RCE webshell command execution trigger
+alert tcp any any -> any 8080:8089 (msg:"RTC webshell command execution attempt detected"; flow:to_server,established; content:"GET /webshell.js/"; nocase; content:"cmd="; nocase; content:"HTTP/1."; nocase; classtype:web-application-attack; metadata:service http, attack_type remote_code_execution; sid:2000006; rev:2;)
+
+# Scenario 7: NoSQL injection bypass on /login endpoint
+alert tcp any any -> any 9000:9009 (msg:"RTC NoSQL injection pattern detected"; flow:to_server,established; content:"POST /login"; nocase; content:"Content-Type: application/json"; nocase; pcre:"/\"\$ne\"\s*:\s*null/i"; classtype:web-application-attack; metadata:service http, attack_type nosql_injection; sid:2000007; rev:2;)
+
+# Scenario 8: XSS payload in VDO.Ninja room query parameter
+alert tcp any any -> any 18080:18089 (msg:"RTC XSS payload in room parameter detected"; flow:to_server,established; content:"GET /examples/control.html"; nocase; content:"room="; nocase; pcre:"/room=[^\r\n]*(onerror|onload)/i"; classtype:web-application-attack; metadata:service http, attack_type xss; sid:2000008; rev:2;)
+
+alert tcp any any -> any 18080:18089 (msg:"RTC XSS alert() payload in room parameter detected"; flow:to_server,established; content:"GET /examples/control.html"; nocase; content:"room="; nocase; pcre:"/room=[^\r\n]*alert(%28|\()/i"; classtype:web-application-attack; metadata:service http, attack_type xss; sid:2000010; rev:2;)
+
+# Scenario 9: Audio exfiltration capture endpoint hit
+# Change rationale: fix Suricata parsing (`;` inside content) and align destination ports with lab9 traffic (80/808x).
+alert tcp any any -> any [80,8080:8089] (msg:"RTC permission-abuse capture endpoint hit"; flow:to_server,established; content:"POST /save-capture"; nocase; content:"data:audio/webm\;base64"; nocase; classtype:policy-violation; metadata:service http, attack_type permission_abuse; sid:2000009; rev:3;)

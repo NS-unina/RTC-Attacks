@@ -1,34 +1,33 @@
 services:
   coturn:
-    container_name: coturn
     build: ./coturn
     image: coturn
     networks:
       lab_net:
-        ipv4_address: 10.14.0.5
+        ipv4_address: ${COTURN_IP:-10.14.0.5}
     command: turnserver -v --user=username1:password1
-
+    volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
   stunner:
-    container_name: stunner
     build: ./stunner
     image: stunner
     tty: true
     depends_on:
-      - coturn
+    - coturn
     networks:
       lab_net:
-        ipv4_address: 10.14.0.10
-    command: > 
-      stunner socks 
-      --turnserver 10.14.0.5:3478 
-      --protocol tcp 
-      --username username1 
-      --password password1 
-      --listen 0.0.0.0:9999
+        ipv4_address: ${STUNNER_IP:-10.14.0.10}
+    command: 'stunner socks --turnserver ${COTURN_IP:-10.14.0.5}:3478 --protocol tcp
+      --username username1 --password password1 --listen 0.0.0.0:9999
 
+      '
+    volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
 networks:
   lab_net:
     driver: bridge
     ipam:
       config:
-        - subnet: 10.14.0.0/24
+      - subnet: ${LAB_SUBNET:-10.14.0.0/24}

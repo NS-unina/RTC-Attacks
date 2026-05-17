@@ -1,0 +1,22 @@
+services:
+  suricata:
+    container_name: suricata
+    build: ./suricata
+    image: suricata-rtc
+    network_mode: host
+    environment:
+      CAPTURE_MODE: ${CAPTURE_MODE:-bridge_events}
+      PCAP_ROTATE_SEC: ${PCAP_ROTATE_SEC:-300}
+      MONITOR_INTERVAL_SEC: ${MONITOR_INTERVAL_SEC:-2}
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./suricata:/etc/suricata:ro
+      - ./suricata/run_continuous.sh:/usr/local/bin/run_continuous.sh:ro
+      - ./captures:/captures
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    command: /usr/local/bin/run_continuous.sh
+    restart: unless-stopped

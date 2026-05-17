@@ -11,23 +11,30 @@ const app = express();
 app.use(express.static("public"))
 app.use(express.json())
 
-// Funzione per popolare il database all'avvio a partire da file JSON
+// Load scenario metadata from JSON at startup.
 async function loadScenarios() {
   try {
-    const count = await Scenario.countDocuments();
-    if (count === 0) {  // se la collection è vuota
-      const dataPath = path.join(__dirname, "database", "scenarios.json");
-      const rawData = fs.readFileSync(dataPath, "utf8");
-      const scenarios = JSON.parse(rawData);
+    // Previous implementation kept for traceability:
+    // const count = await Scenario.countDocuments();
+    // if (count === 0) { await Scenario.insertMany(scenarios); }
+    // Change rationale: upserts keep scenario metadata in sync when IDs are split or edited.
+    const dataPath = path.join(__dirname, "database", "scenarios.json");
+    const rawData = fs.readFileSync(dataPath, "utf8");
+    const scenarios = JSON.parse(rawData);
 
-      await Scenario.insertMany(scenarios);
-    } 
+    await Scenario.bulkWrite(scenarios.map(({ _id, ...scenario }) => ({
+      updateOne: {
+        filter: { id: scenario.id },
+        update: { $set: scenario },
+        upsert: true
+      }
+    })));
   } catch (err) {
     console.error("Error:", err.message);
   }
 }
 
-// Funzione che attende finché non è stabilita la connessione con il DB
+// Wait until the database connection is ready.
 async function connectMongoWithRetry() {
   while (true) {
     try {
@@ -43,7 +50,7 @@ async function connectMongoWithRetry() {
   }
 }
 
-// Funzione che builda e avvia i container principali, collega nodeJS al DB e carica gli scenari
+// Build and start the main containers, connect to MongoDB, and load scenarios.
 async function start(){
     console.log("Starting containers...");
     await execAsync(`make build start`);
@@ -55,6 +62,56 @@ async function start(){
 
 function escape(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function labPath(folder) {
+    if (!/^[A-Za-z0-9_.-]+$/.test(folder || "")) {
+        throw new Error("Invalid lab folder");
+    }
+
+    const resolved = path.resolve(__dirname, "public", "labs", folder);
+    const labsRoot = path.resolve(__dirname, "public", "labs");
+
+    if (!resolved.startsWith(labsRoot + path.sep)) {
+        throw new Error("Invalid lab folder");
+    }
+
+    return resolved;
+}
+
+function makeEnv(req) {
+    const instance = String(req.body.instance || req.body.stack || "default");
+
+    if (!/^[A-Za-z0-9_.-]+$/.test(instance)) {
+        throw new Error("Invalid instance name");
+    }
+
+    return {
+        ...process.env,
+        INSTANCE: instance
+    };
+}
+
+function streamMake(res, cwd, args, env) {
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Transfer-Encoding", "chunked");
+
+    const stream = spawn("make", args, { cwd, env });
+
+    stream.stdout.on("data", (chunk) => {
+        res.write(chunk.toString());
+    });
+
+    stream.stderr.on("data", (chunk) => {
+        res.write(chunk.toString());
+    });
+
+    stream.on("close", (code) => {
+        if (code !== 0) {
+            res.write(`\n[process exited with code ${code}]\n`);
+        }
+        res.end();
+    });
 }
 
 const scenarioSchema = new mongoose.Schema({
@@ -98,51 +155,22 @@ app.get("/scenario/:id", async(req, res) => {
 })
 
 app.post("/make-start", async(req, res) => {
-    const folder = req.body.folder;
-
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Transfer-Encoding", "chunked");
-    
-    let buildCmd = `
-        make start && cd ${__dirname}/public/labs/${folder} && make start
-    `;
-
-    const stream = spawn(buildCmd, { shell: true });
-
-    stream.stdout.on("data", (chunk) => {
-        res.write(chunk.toString());
-    });
-
-    stream.stderr.on("data", (chunk) => {
-        res.write(chunk.toString());
-    });
-
-    stream.on("close", () => {
-        res.end();
-    });
+    try {
+        const folder = req.body.folder;
+        await execAsync(`make start`);
+        streamMake(res, labPath(folder), ["start"], makeEnv(req));
+    } catch (err) {
+        return res.status(400).send(err.message);
+    }
 })
 
 app.post("/make-stop", async(req, res) => {
-    const folder = req.body.folder;
-        
-    let buildCmd = `cd ${__dirname}/public/labs/${folder} && make stop`;
-
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Transfer-Encoding", "chunked");
-
-    const stream = spawn(buildCmd, { shell: true });
-
-    stream.stdout.on("data", (chunk) => {
-        res.write(chunk.toString());
-    });
-
-    stream.stderr.on("data", (chunk) => {
-        res.write(chunk.toString());
-    });
-
-    stream.on("close", () => {
-        res.end();
-    });
+    try {
+        const folder = req.body.folder;
+        streamMake(res, labPath(folder), ["stop"], makeEnv(req));
+    } catch (err) {
+        return res.status(400).send(err.message);
+    }
 })
 
 app.get("/search", async(req, res) => {
@@ -162,51 +190,51 @@ app.post("/build-all", async(req, res) => {
     const folder = req.body.folder;
     const elements = req.body.elements;
     
-    const container = elements.replaceAll(","," ")
+    try {
+        const services = String(elements || "")
+            .replaceAll(",", " ")
+            .split(/\s+/)
+            .filter(Boolean);
 
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Transfer-Encoding", "chunked");
+        if (!services.every(service => /^[A-Za-z0-9_.-]+$/.test(service))) {
+            throw new Error("Invalid image/service name");
+        }
 
-    let buildCmd = `cd ${__dirname}/public/labs/${folder} && make build SERVICE="${container}"`
-    
-    
-    const stream = spawn(buildCmd, { shell: true });
-
-    stream.stdout.on("data", (chunk) => {
-        res.write(chunk.toString());
-    });
-
-    stream.stderr.on("data", (chunk) => {
-        res.write(chunk.toString());
-    });
-
-    stream.on("close", () => {
-        res.end();
-    });
+        streamMake(res, labPath(folder), ["build", `SERVICE=${services.join(" ")}`], makeEnv(req));
+    } catch (err) {
+        return res.status(400).send(err.message);
+    }
 })
 
 app.post("/build", async(req, res) => {
     const image = req.body.image;
     const folder = req.body.folder;
 
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Transfer-Encoding", "chunked");
+    try {
+        if (!/^[A-Za-z0-9_.-]+$/.test(image || "")) {
+            throw new Error("Invalid image/service name");
+        }
 
-    let buildCmd = `cd ${__dirname}/public/labs/${folder} && make build SERVICE="${image}"`
-    
-    const stream = spawn(buildCmd, { shell: true });
+        streamMake(res, labPath(folder), ["build", `SERVICE=${image}`], makeEnv(req));
+    } catch (err) {
+        return res.status(400).send(err.message);
+    }
+})
 
-    stream.stdout.on("data", (chunk) => {
-        res.write(chunk.toString());
-    });
+app.post("/make-auto-attack", async(req, res) => {
+    try {
+        const folder = req.body.folder;
+        const scenario = String(req.body.scenario || "");
+        const args = ["auto-attack"];
 
-    stream.stderr.on("data", (chunk) => {
-        res.write(chunk.toString());
-    });
+        if (scenario) {
+            args.push(`SCENARIO=${scenario}`);
+        }
 
-    stream.on("close", () => {
-        res.end();
-    });
+        streamMake(res, labPath(folder), args, makeEnv(req));
+    } catch (err) {
+        return res.status(400).send(err.message);
+    }
 })
 
 app.post("/images-to-build", async(req, res) =>{

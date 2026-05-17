@@ -201,7 +201,10 @@
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/socket.io-file-client/socket.io-file-client.js"></script>
   <script>
-    const socket = io("http://localhost:8080");
+    // Previous implementation kept for traceability:
+    // const socket = io("http://localhost:8080");
+    // Change rationale: location-derived Socket.IO URL supports non-default ports and parallel stacks.
+    const socket = io(window.location.origin);
     const uploader = new SocketIOFileClient(socket);
 
     const sendButton = document.querySelector('.send-message-button');

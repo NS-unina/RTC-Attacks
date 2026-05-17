@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "scenario-runner"
+version = "0.1.0"
+description = "Strategy-based runner for RTC-Attacks auto-attack scenarios"
+authors = ["RTC-Attacks Team"]
+readme = "README.md"
+packages = [{ include = "scenario_runner", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+typer = "^0.12.3"
+click = "8.1.7"
+rich = "^13.7.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.2"
+
+[tool.poetry.scripts]
+scenario-runner = "scenario_runner.cli:app"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"

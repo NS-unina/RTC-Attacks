@@ -6,6 +6,7 @@ set -e
 # Expected RTP source (Asterisk)
 SRC_IP="${SRC_IP:-10.10.0.5}"
 RTP_PORT_RANGE="${RTP_PORT_RANGE:-10000-10099}"
+WIRESHARK_CID="${WIRESHARK_CID:-wireshark}"
 
 # If the user passes --port-only, run in silent mode
 PORT_ONLY=false
@@ -20,7 +21,10 @@ fi
 # Capture the Asterisk RTP source port (not destination port).
 # This avoids selecting the client-side ephemeral port (for example 6738).
 PORT=$(
-    docker exec wireshark tshark -i eth0 \
+    # Previous implementation kept for traceability:
+    # docker exec wireshark tshark -i eth0 \
+    # Change rationale: WIRESHARK_CID lets the Makefile target the selected Compose project instance.
+    docker exec "${WIRESHARK_CID}" tshark -i eth0 \
         -f "udp portrange ${RTP_PORT_RANGE} and src host ${SRC_IP}" \
         -Y "ip.src == ${SRC_IP}" \
         -c 20 -T fields -e udp.srcport 2>/dev/null \

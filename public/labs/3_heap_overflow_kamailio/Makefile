@@ -1,62 +1,55 @@
 DOCKER_COMPOSE := $(shell command -v docker-compose 2> /dev/null || echo "docker compose")
 STACK_ID := 3_heap_overflow_kamailio
-CHECK_AVAILABLE_TAG := RTC_CHECK_AVAILABLE
 DRY_RUN_TAG := RTC_DRY_RUN
+ATTACK_WINDOW_TAG := RTC_ATTACK_WINDOW
+RTC_EVENT ?= :
+
+INSTANCE ?= default
+COMPOSE_PROJECT_NAME ?= $(STACK_ID)$(if $(filter default,$(INSTANCE)),,_$(INSTANCE))
+COMPOSE := COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) $(DOCKER_COMPOSE)
 
 SERVICE ?= 
-TARGET_IP ?= 10.13.0.5
+INSTANCE_INDEX ?= $(if $(filter default,$(INSTANCE)),0,$(INSTANCE))
+NET_PREFIX ?= 10.22.$(INSTANCE_INDEX)
+LAB_SUBNET ?= $(NET_PREFIX).0/24
+KAMAILIO_IP ?= $(NET_PREFIX).5
+SIPP_IP ?= $(NET_PREFIX).10
+TARGET_IP ?= $(KAMAILIO_IP)
 KAMAILIO_PORT ?= 5060
 ATTACK_TIMEOUT_SEC ?= 30
 ATTACK_POLL_SEC ?= 1
 
+export LAB_SUBNET KAMAILIO_IP SIPP_IP
+
 run:
-	@$(DOCKER_COMPOSE) up -d --remove-orphans
+	@$(COMPOSE) up -d --remove-orphans
 
 start: run
 
 stop:
-	@$(DOCKER_COMPOSE) down --remove-orphans
+	@$(COMPOSE) down --remove-orphans
 
 start-attacks:
-	@docker exec -it sipp101 bash
+	# Previous implementation kept for traceability:
+	# @docker exec -it sipp101 bash
+	# Change rationale: service-scoped exec targets the selected Compose project instance.
+	@$(COMPOSE) exec sipp101 bash
 
 build: 
-	@$(DOCKER_COMPOSE) build --no-cache $(SERVICE)
+	@$(COMPOSE) build --no-cache $(SERVICE)
 rebuild:
-	@$(DOCKER_COMPOSE) down --rmi all --remove-orphans || true
-	@$(DOCKER_COMPOSE) build --no-cache $(SERVICE)
+	@$(COMPOSE) down --rmi all --remove-orphans || true
+	@$(COMPOSE) build --no-cache $(SERVICE)
 
-is-available:
-	@echo "$(CHECK_AVAILABLE_TAG)_BEGIN stack=$(STACK_ID)"
-	@$(DOCKER_COMPOSE) config -q
-	@SERVICES="$$( $(DOCKER_COMPOSE) config --services )"; \
-	if [ -z "$$SERVICES" ]; then \
-		echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) reason=no_services"; \
-		exit 1; \
-	fi; \
-	for SVC in $$SERVICES; do \
-		CID="$$( $(DOCKER_COMPOSE) ps -q $$SVC )"; \
-		if [ -z "$$CID" ]; then \
-			echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) service=$$SVC reason=not_running"; \
-			exit 1; \
-		fi; \
-		STATE="$$(docker inspect -f '{{.State.Status}}' $$CID)"; \
-		if [ "$$STATE" != "running" ]; then \
-			echo "$(CHECK_AVAILABLE_TAG)_FAIL stack=$(STACK_ID) service=$$SVC reason=unexpected_state state=$$STATE"; \
-			exit 1; \
-		fi; \
-		echo "$(CHECK_AVAILABLE_TAG)_OK stack=$(STACK_ID) service=$$SVC state=$$STATE"; \
-	done; \
-	echo "$(CHECK_AVAILABLE_TAG)_OK stack=$(STACK_ID) all_services=running"
 
 dry-run:
 	@echo "$(DRY_RUN_TAG)_BEGIN stack=$(STACK_ID)"
-	@docker exec sipp101 sh -lc "test -f /sipp/xml/registration101.xml && test -f /sipp/xml/overflow.xml" || { \
+	@$(COMPOSE) exec -T sipp101 sh -lc "test -f /sipp/xml/registration101.xml && test -f /sipp/xml/overflow.xml" || { \
 		echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=sipp_assets reason=missing_files"; \
 		exit 1; \
 	}
 	@echo "$(DRY_RUN_TAG)_OK stack=$(STACK_ID) check=sipp_assets"
-	@docker exec sipp101 sipp -sf /sipp/xml/registration101.xml "$(TARGET_IP):$(KAMAILIO_PORT)" -m 1 >/tmp/kamailio-dry-run.log 2>&1 || { \
+	@$(COMPOSE) exec -T sipp101 sipp -sf /sipp/xml/registration101.xml "$(TARGET_IP):$(KAMAILIO_PORT)" -m 1 >/tmp/kamailio-dry-run.log 2>&1 || { \
 		echo "$(DRY_RUN_TAG)_FAIL stack=$(STACK_ID) check=kamailio_registration reason=sipp_failed"; \
 		exit 1; \
 	}
@@ -66,25 +59,27 @@ dry-run:
 overflow-attack:
 	@IP="$(TARGET_IP)"; \
 	if [ -z "$$IP" ]; then \
-		IP=$$(docker inspect kamailio --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null || true); \
+		CID="$$( $(COMPOSE) ps -q kamailio )"; \
+		IP=$$(docker inspect $$CID --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null || true); \
 	fi; \
 	if [ -z "$$IP" ]; then \
 		echo "[!] Unable to resolve target IP. Set TARGET_IP explicitly."; \
 		exit 1; \
 	fi; \
 	echo "[*] Launching overflow attack against $$IP:$(KAMAILIO_PORT)..."; \
-	docker exec sipp101 sipp -sf /sipp/xml/overflow.xml "$$IP:$(KAMAILIO_PORT)" -m 1
+	$(COMPOSE) exec -T sipp101 sipp -sf /sipp/xml/overflow.xml "$$IP:$(KAMAILIO_PORT)" -m 1
 
 kamailio-status:
-	@docker ps -a --filter name=kamailio --format 'table {{.Names}}\t{{.Status}}'
+	@$(COMPOSE) ps -a kamailio
 
 check-kamailio-running:
-	@STATUS=$$(docker inspect -f '{{.State.Status}}' kamailio 2>/dev/null || echo "not_found"); \
+	@CID="$$( $(COMPOSE) ps -q kamailio )"; \
+	STATUS=$$(docker inspect -f '{{.State.Status}}' $$CID 2>/dev/null || echo "not_found"); \
 	if [ "$$STATUS" != "running" ]; then \
 		echo "[!] Pre-check failed: kamailio status is '$$STATUS' before attack."; \
 		echo "[i] Check with: make kamailio-status"; \
 		echo "[i] Last kamailio logs:"; \
-		docker logs --tail 20 kamailio 2>/dev/null || true; \
+		$(COMPOSE) logs --tail 20 kamailio 2>/dev/null || true; \
 		exit 1; \
 	fi
 
@@ -93,7 +88,8 @@ check-crash:
 	@i=0; \
 	limit=$$(( $(ATTACK_TIMEOUT_SEC) / $(ATTACK_POLL_SEC) )); \
 	while [ $$i -le $$limit ]; do \
-		STATUS=$$(docker inspect -f '{{.State.Status}}' kamailio 2>/dev/null || echo "not_found"); \
+		CID="$$( $(COMPOSE) ps -q kamailio )"; \
+		STATUS=$$(docker inspect -f '{{.State.Status}}' $$CID 2>/dev/null || echo "not_found"); \
 		if [ "$$STATUS" != "running" ]; then \
 			echo "[+] Attack success: kamailio status is '$$STATUS'."; \
 			exit 0; \
@@ -105,8 +101,26 @@ check-crash:
 	exit 1
 
 auto-attack: stop build start
+	@$(RTC_EVENT) lab_ready stack=$(STACK_ID) scenario=3 instance=$(INSTANCE) \
+		attacker_ip=$(SIPP_IP) victim_ip=$(TARGET_IP) \
+		expected_sids=2000003 attack_type=sip_overflow \
+		probe_targets=$(SIPP_IP),$(TARGET_IP) probe_protocols=tcp,udp,icmp
 	@echo "[*] Waiting for containers (3 seconds)..."
 	@sleep 3
 	@$(MAKE) check-kamailio-running
+	@$(RTC_EVENT) attack_start stack=$(STACK_ID) scenario=3 instance=$(INSTANCE) attack=sip_overflow attacker_ip=$(SIPP_IP) victim_ip=$(TARGET_IP)
+	@echo "$(ATTACK_WINDOW_TAG)_BEGIN ts_utc=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") stack=$(STACK_ID) scenario=3 instance=$(INSTANCE) attack=sip_overflow"
 	@$(MAKE) overflow-attack TARGET_IP="$(TARGET_IP)" KAMAILIO_PORT="$(KAMAILIO_PORT)"
 	@$(MAKE) check-crash ATTACK_TIMEOUT_SEC="$(ATTACK_TIMEOUT_SEC)" ATTACK_POLL_SEC="$(ATTACK_POLL_SEC)"
+	@$(RTC_EVENT) attack_end stack=$(STACK_ID) scenario=3 instance=$(INSTANCE) attack=sip_overflow
+	@echo "$(ATTACK_WINDOW_TAG)_END ts_utc=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") stack=$(STACK_ID) scenario=3 instance=$(INSTANCE) attack=sip_overflow"
+	@$(RTC_EVENT) lab_stop stack=$(STACK_ID) scenario=3 instance=$(INSTANCE)
+	@$(MAKE) stop
+
+attack: 
+	@$(MAKE) check-kamailio-running
+	@echo "$(ATTACK_WINDOW_TAG)_BEGIN ts_utc=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") stack=$(STACK_ID) scenario=3 instance=$(INSTANCE) attack=sip_overflow"
+	@$(MAKE) overflow-attack TARGET_IP="$(TARGET_IP)" KAMAILIO_PORT="$(KAMAILIO_PORT)"
+	@$(MAKE) check-crash ATTACK_TIMEOUT_SEC="$(ATTACK_TIMEOUT_SEC)" ATTACK_POLL_SEC="$(ATTACK_POLL_SEC)"
+	@echo "$(ATTACK_WINDOW_TAG)_END ts_utc=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") stack=$(STACK_ID) scenario=3 instance=$(INSTANCE) attack=sip_overflow"
+	@$(MAKE) stop

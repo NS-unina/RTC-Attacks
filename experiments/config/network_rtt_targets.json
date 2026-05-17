@@ -1,0 +1,73 @@
+{
+  "_comment": "RTT probe targets per scenario. Use 'service' for container discovery by Docker labels, or explicit 'host'. Optional fields: 'protocol' ('icmp' or 'tcp') and 'port' (required for tcp).",
+  "default_sample_interval_sec": 1.0,
+  "default_baseline_samples": 5,
+  "scenarios": {
+    "1": {
+      "description": "SIP Spoofing DoS - FreeSWITCH",
+      "stack_id": "1_2_sip_spoofing_dos_freeswitch",
+      "rtt_targets": [
+        { "service": "freeswitch", "label": "freeswitch", "protocol": "tcp", "port": 5060 }
+      ]
+    },
+    "2": {
+      "description": "SIP Spoofing DoS - FreeSWITCH (variant)",
+      "stack_id": "1_2_sip_spoofing_dos_freeswitch",
+      "rtt_targets": [
+        { "service": "freeswitch", "label": "freeswitch", "protocol": "tcp", "port": 5060 }
+      ]
+    },
+    "3": {
+      "description": "Heap Overflow - Kamailio",
+      "stack_id": "3_heap_overflow_kamailio",
+      "rtt_targets": [
+        { "service": "kamailio", "label": "kamailio", "protocol": "tcp", "port": 5060 }
+      ]
+    },
+    "4": {
+      "description": "RTP Bleed Injection - Asterisk",
+      "stack_id": "4_rtp_bleed_injection_asterisk",
+      "rtt_targets": [
+        { "service": "asterisk", "label": "asterisk", "protocol": "tcp", "port": 5060 }
+      ]
+    },
+    "5": {
+      "description": "TURN Access Bypass - coturn",
+      "stack_id": "5_coturn_access_bypass",
+      "rtt_targets": [
+        { "service": "coturn", "label": "coturn", "protocol": "tcp", "port": 3478 }
+      ]
+    },
+    "6": {
+      "description": "SocketIOFile Webshell",
+      "stack_id": "6_socketiofile_webshell",
+      "rtt_targets": [
+        { "service": "node_socketiofile", "label": "node_socketiofile", "protocol": "tcp", "port": 8080 }
+      ]
+    },
+    "7": {
+      "description": "VDO.ninja XSS",
+      "stack_id": "7_8_vdo_ninja_xss_nosqli",
+      "rtt_targets": [
+        { "service": "vdoninja",      "label": "vdoninja", "protocol": "tcp", "port": 18080 },
+        { "service": "node_mongoose", "label": "node_mongoose", "protocol": "tcp", "port": 9000 }
+      ]
+    },
+    "8": {
+      "description": "VDO.ninja NoSQLi",
+      "stack_id": "7_8_vdo_ninja_xss_nosqli",
+      "rtt_targets": [
+        { "service": "vdoninja",      "label": "vdoninja", "protocol": "tcp", "port": 18080 },
+        { "service": "node_mongoose", "label": "node_mongoose", "protocol": "tcp", "port": 9000 }
+      ]
+    },
+    "9": {
+      "description": "Firefox Access Cam Web",
+      "stack_id": "9_firefox_access_cam_web",
+      "rtt_targets": [
+        { "service": "node_firefox", "label": "node_firefox", "protocol": "tcp", "port": 80 },
+        { "service": "gophish",      "label": "gophish", "protocol": "tcp", "port": 81 }
+      ]
+    }
+  }
+}

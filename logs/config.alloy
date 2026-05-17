@@ -1,0 +1,99 @@
+local.file_match "experiment_logs" {
+    path_targets = [
+        { "__path__" = "/var/log/experiment_events.log" },
+    ]
+}
+
+// 2. Parsa il contenuto JSON del log per estrarre dinamicamente i metadati
+loki.source.file "log_processor" {
+    targets    = local.file_match.experiment_logs.targets
+    forward_to = [loki.process.extract_json_labels.receiver]
+}
+
+loki.process "extract_json_labels" {
+    // Estrae i campi dal JSON per trasformarli in etichette Loki
+    stage.json {
+        expressions = { 
+            extracted_stack    = "stack", 
+            extracted_scenario = "scenario",
+            extracted_instance = "instance",
+            extracted_event    = "event",
+            timestamp          = "timestamp",
+        }
+    }
+
+    stage.timestamp {
+        source = "timestamp"
+        format = "RFC3339"
+    }
+    
+    // Applica le etichette al log stream
+    stage.labels {
+        values = {
+            stack    = "extracted_stack",
+            scenario = "extracted_scenario",
+            instance = "extracted_instance",
+            event    = "extracted_event",
+            job      = "lab_events",
+        }
+    }
+
+    forward_to = [loki.write.endpoint_loki.receiver]
+}
+
+local.file_match "suricata_alerts" {
+    path_targets = [
+            { "__path__" = "/results/**/alerts.json"  },
+                
+    ]
+    
+}
+loki.source.file "suricata_processor" {
+        targets    = local.file_match.suricata_alerts.targets
+            forward_to = [loki.process.extract_suricata_labels.receiver]
+            
+}
+
+loki.process "extract_suricata_labels" {
+    // Estraiamo i campi annidati del JSON di Suricata
+    stage.json {
+        expressions = {
+            event_type = "event_type",
+            proto      = "proto",
+            signature  = "alert.signature",    // Campo annidati usando il punto
+            category   = "alert.category",     // Categoria dell'allerta
+            severity   = "alert.severity",     // Gravità dell'allerta
+            sip_method = "sip.method",         // Se presente, il metodo SIP (es. MESSAGE)
+            timestamp  = "timestamp",
+        }
+    }
+    
+    stage.timestamp {
+        source = "timestamp"
+        format = "RFC3339"
+    }
+    
+
+    // Applichiamo le etichette specifiche per Suricata
+    stage.labels {
+        values = {
+            job        = "suricata_alerts",    // Cambiamo job per distinguerlo su Grafana
+            event_type = "event_type",
+            proto      = "proto",
+            signature  = "signature",
+            category   = "category",
+            severity   = "severity",
+            sip_method = "sip_method",
+            logfile    = "filename",           // Ti dice da quale exp/scenario/repetition arriva!
+        }
+    }
+
+    forward_to = [loki.write.endpoint_loki.receiver]
+}
+
+// Send logs
+loki.write "endpoint_loki" {
+    endpoint {
+        url = "http://10.9.0.5:3100/loki/api/v1/push"
+    }
+}

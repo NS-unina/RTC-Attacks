@@ -21,17 +21,3 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: example
     ports:
       - 27017:27017
-
-  snort:
-    container_name: snort
-    build: ./snort
-    image: snort
-    network_mode: host
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    volumes:
-      - ./snort:/usr/local/etc/snort:ro
-      - ./captures:/captures
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    restart: unless-stopped

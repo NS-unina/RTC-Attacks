@@ -1,0 +1,12 @@
+services:
+  alloy:
+    image: grafana/alloy:v1.16.1
+    container_name: alloy-agent
+    volumes:
+      # Monta la configurazione
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      # Monta il file/cartella dove lo script Python scrive i log
+      - ./experiment_events.log:/var/log/experiment_events.log:ro
+      - ../results/:/results:ro
+    command: run --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    restart: unless-stopped
