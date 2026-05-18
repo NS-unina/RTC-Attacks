@@ -27,7 +27,7 @@ raw/
 analysis/
 experiments/results/
 
-recordings/**
+**/recordings/**
 !recordings/.gitkeep
 
 

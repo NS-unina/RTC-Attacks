@@ -7,6 +7,7 @@ Supports use as a context manager for safe teardown.
 from __future__ import annotations
 
 from pathlib import Path
+from experiments import config as cfg
 
 from experiments.infra.shell import StepResult, run_cmd
 from experiments.pipeline import ids_dataset_pipeline as ids_pipeline
@@ -22,7 +23,7 @@ class IdsController:
             # ... run scenario ...
     """
 
-    def __init__(self, repo_root: Path = Path.cwd()) -> None:
+    def __init__(self, repo_root: Path = cfg.REPO_ROOT) -> None:
         self._repo_root = repo_root
 
     def start(self) -> None:

@@ -26,6 +26,10 @@ class CaptureStore:
     def __init__(self, repo_root: Path) -> None:
         self._captures_dir = repo_root / "captures"
 
+    def get_captures_dir(self) -> Path:
+        """Return the absolute path to the captures directory."""
+        return self._captures_dir.resolve()
+
     def latest_capture_root(self) -> Path:
         """Return the absolute path to the most recent capture directory."""
         marker = self._captures_dir / "last_root.txt"

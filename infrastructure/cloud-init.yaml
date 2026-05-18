@@ -1,0 +1,157 @@
+#cloud-config
+# Cloud-init TEMPLATE for RTC-Attacks experiment VMs
+# Variables like {{VM_IP}} are replaced by Makefile during VM creation
+
+package_update: true
+package_upgrade: false
+
+packages:
+  # Docker
+  - docker.io
+  # Python and build tools
+  - python3
+  - python3-pip
+  - python3-venv
+  - python3-dev
+  - build-essential
+  # Monitoring tools
+  - sysstat
+  - iftop
+  - htop
+  - iotop
+  - nethogs
+  - stress-ng
+  - tcpdump
+  - net-tools
+  - iproute2
+  # Utilities
+  - git
+  - curl
+  - wget
+  - jq
+  - tmux
+
+groups:
+  - docker
+
+users:
+  - default
+  - name: ubuntu
+    groups: docker
+    sudo: ALL=(ALL) NOPASSWD:ALL
+
+write_files:
+  # Static IP configuration for custom bridge network (ens4)
+  # Multipass creates ens4 for --network bridge
+  - path: /etc/netplan/60-rtc-static.yaml
+    owner: root:root
+    permissions: '0600'
+    content: |
+      network:
+        version: 2
+        ethernets:
+          ens4:
+            dhcp4: no
+            addresses:
+              - {{VM_IP}}/{{VM_NETMASK}}
+            routes:
+              - to: 0.0.0.0/0
+                via: {{VM_GATEWAY}}
+                metric: 200
+            nameservers:
+              addresses:
+                - 8.8.8.8
+                - 1.1.1.1
+
+runcmd:
+  # Wait for ens4 interface to be available (from --network bridge)
+  - timeout 30 bash -c 'until ip link show ens4 2>/dev/null; do sleep 1; done' || true
+  
+  # Apply static IP configuration
+  - netplan apply || true
+  
+  # Disable swap for consistent performance
+  - swapoff -a
+  - sed -i '/swap/d' /etc/fstab
+  
+  # Set timezone
+  - timedatectl set-timezone Europe/Rome
+  
+  # Configure NTP
+  - systemctl enable systemd-timesyncd
+  - systemctl start systemd-timesyncd
+  
+  # Configure memory overcommit (strict allocation)
+  - sysctl -w vm.overcommit_memory=2
+  - echo 'vm.overcommit_memory=2' >> /etc/sysctl.conf
+  
+  # Enable Docker
+  - systemctl enable docker
+  - systemctl start docker
+  - usermod -aG docker ubuntu
+  
+  # Create RTC-Attacks workspace
+  - mkdir -p /home/ubuntu/rtcattack
+  - chown -R ubuntu:ubuntu /home/ubuntu/rtcattack
+  
+  # Create Python virtual environment
+  - sudo -u ubuntu python3 -m venv /home/ubuntu/rtcattack/.venv
+  
+  # Create activation script
+  - |
+    cat > /home/ubuntu/rtcattack/activate.sh <<'EOFACTIVATE'
+    #!/bin/bash
+    source /home/ubuntu/rtcattack/.venv/bin/activate
+    export PYTHONPATH=/home/ubuntu/rtcattack:$PYTHONPATH
+    cd /home/ubuntu/rtcattack
+    echo "RTC-Attacks environment activated"
+    echo "Python: $(which python3)"
+    echo "Virtual env: $VIRTUAL_ENV"
+    EOFACTIVATE
+  - chmod +x /home/ubuntu/rtcattack/activate.sh
+  - chown ubuntu:ubuntu /home/ubuntu/rtcattack/activate.sh
+  
+  # Create README
+  - echo "# RTC-Attacks Experiment VM" > /home/ubuntu/rtcattack/README.md
+  - echo "" >> /home/ubuntu/rtcattack/README.md
+  - echo "VM configured and ready for experiments" >> /home/ubuntu/rtcattack/README.md
+  - echo "Activate environment with 'rtc' command" >> /home/ubuntu/rtcattack/README.md
+  - chown ubuntu:ubuntu /home/ubuntu/rtcattack/README.md
+  
+  # Enable sysstat for performance monitoring
+  - sed -i 's/ENABLED="false"/ENABLED="true"/' /etc/default/sysstat
+  - systemctl enable sysstat
+  - systemctl start sysstat
+  
+  # Set optimal kernel parameters for RTC experiments
+  - sysctl -w net.core.rmem_max=134217728
+  - sysctl -w net.core.wmem_max=134217728
+  - sysctl -w net.ipv4.tcp_rmem="4096 87380 67108864"
+  - sysctl -w net.ipv4.tcp_wmem="4096 65536 67108864"
+  - echo 'net.core.rmem_max=134217728' >> /etc/sysctl.conf
+  - echo 'net.core.wmem_max=134217728' >> /etc/sysctl.conf
+  - echo 'net.ipv4.tcp_rmem=4096 87380 67108864' >> /etc/sysctl.conf
+  - echo 'net.ipv4.tcp_wmem=4096 65536 67108864' >> /etc/sysctl.conf
+  
+  # Network QoS configuration (if variables set)
+  {{NETWORK_QOS_COMMANDS}}
+  
+  # Add activation alias to bashrc
+  - echo "alias rtc='source /home/ubuntu/rtcattack/activate.sh'" >> /home/ubuntu/.bashrc
+  
+  # Mark cloud-init as complete
+  - touch /var/log/cloud-init-complete
+  - echo "Cloud-init completed at $(date)" >> /var/log/cloud-init-complete
+  - echo "VM configured - {{VM_NAME}} at {{VM_IP}}" >> /var/log/cloud-init-complete
+
+final_message: |
+  RTC-Attacks VM ready: {{VM_NAME}} at {{VM_IP}}
+  
+  Next steps:
+  1. Mount code: make mount-code instance=N
+  2. Install deps: make install-deps instance=N
+  3. Shell in: make shell instance=N
+  4. Activate: rtc
+  5. Run experiments!
+  
+  Cloud-init completed in $UPTIME seconds

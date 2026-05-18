@@ -26,13 +26,29 @@ if str(REPO_ROOT) not in sys.path:
 
 RESULTS_DIR = REPO_ROOT / "results"
 
-def setup_run_dir(exp_no: int, scenario_id: int, instance: int, repetition: int) -> Path:
+def setup_run_dir(exp_no: int, repetition: int, scenario_id: int, instance: int) -> Path:
     """Create and return a directory for storing results of a specific run."""
-    run_dir = RESULTS_DIR / f"exp_{exp_no}" / f"scenario_{scenario_id}" / f"instance_{instance}" / f"repetition_{repetition}"
+    run_dir = RESULTS_DIR / f"exp_{exp_no}" / f"rep_{repetition}" / f"scenario_{scenario_id}" / f"instance_{instance}"
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
 
 _config_cache: dict[str, Any] | None = None
+
+def get_experiment_dir(exp_no: int): 
+    """Get the base directory for a specific experiment number."""
+    exp_dir = RESULTS_DIR / f"exp_{exp_no}"
+    exp_dir.mkdir(parents=True, exist_ok=True)
+    return exp_dir
+
+def get_repetition_dir(exp_no: int, repetition: int):
+    """Get the directory for a specific experiment number and repetition."""
+    rep_dir = get_experiment_dir(exp_no) / f"rep_{repetition}"
+    return rep_dir
+
+def get_run_dir(exp_no: int, repetition: int, scenario_id: int, instance: int) -> Path:
+    """Convenience function to get the run directory for a specific experiment configuration."""
+    run_dir = RESULTS_DIR / f"exp_{exp_no}" / f"rep_{repetition}" / f"scenario_{scenario_id}" / f"instance_{instance}"
+    return run_dir
 
 
 def load_defaults() -> dict[str, Any]:
@@ -84,7 +100,7 @@ def discover_labs(labs_dir: Path = Path.cwd() / "public" / "labs" ) -> dict[int,
     
     return labs
 
-def get_lab_path(scenario_id: int, labs_dir: Path = Path.cwd() / "public" / "labs") -> Path:
+def get_lab_path(scenario_id: int, labs_dir: Path = REPO_ROOT / "public" / "labs") -> Path:
     """Get lab path for a given scenario ID."""
     labs = discover_labs(labs_dir)
     if scenario_id not in labs:
