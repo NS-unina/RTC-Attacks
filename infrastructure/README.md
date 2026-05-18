@@ -241,7 +241,7 @@ make shell instance=0
 # Then inside VM:
 htop           # CPU/memory usage
 iotop -o       # Disk I/O
-iftop -i extra0  # Network traffic
+iftop -i ens4  # Network traffic
 ```
 
 ### Docker Pre-installed
@@ -321,7 +321,7 @@ make shell instance=1
 - Check VM network config: `make shell instance=0`, then `ip addr`
 
 **Netplan apply fails:**
-- The network interface in the VM might not be called `extra0`
+- The network interface in the VM might not be called `ens4`
 - SSH into VM and check: `ip link show`
 - Adjust the interface name in the Makefile if needed
 
@@ -331,7 +331,7 @@ make shell instance=1
 
 **Network QoS not working:**
 - Ensure `tc` (traffic control) is available in VM
-- Check current qdisc: `make shell instance=0`, then `tc qdisc show dev extra0`
+- Check current qdisc: `make shell instance=0`, then `tc qdisc show dev ens4`
 
 ## Resource Planning
 

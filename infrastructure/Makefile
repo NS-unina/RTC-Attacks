@@ -72,7 +72,7 @@ create: check-multipass setup-bridge
 	@echo "[*] Generating cloud-init with network configuration..."
 	@$(MAKE) _generate-cloud-init instance=$(instance)
 	@# Launch VM with custom bridge network and cloud-init
-	@# Default NAT network (ens3) + custom bridge (extra0) for static IP
+	@# Default NAT network (ens3) + custom bridge (ens4) for static IP
 	@cat /tmp/$(VM_NAME)-cloud-init.yaml | multipass launch $(VM_IMAGE) \
 		--name $(VM_NAME) \
 		--memory $(VM_RAM) \
@@ -101,13 +101,13 @@ _generate-cloud-init:
 	@# Generate network QoS commands if configured
 	@QOS_COMMANDS=""; \
 	if [ -n "$(VM_NETWORK_BANDWIDTH_LIMIT)" ]; then \
-		QOS_COMMANDS="$$QOS_COMMANDS  - tc qdisc add dev extra0 root tbf rate $(VM_NETWORK_BANDWIDTH_LIMIT)mbit burst 32kbit latency 400ms\n"; \
+		QOS_COMMANDS="$$QOS_COMMANDS  - tc qdisc add dev ens4 root tbf rate $(VM_NETWORK_BANDWIDTH_LIMIT)mbit burst 32kbit latency 400ms\n"; \
 	fi; \
 	if [ -n "$(VM_NETWORK_LATENCY)" ]; then \
-		QOS_COMMANDS="$$QOS_COMMANDS  - tc qdisc add dev extra0 root netem delay $(VM_NETWORK_LATENCY)ms\n"; \
+		QOS_COMMANDS="$$QOS_COMMANDS  - tc qdisc add dev ens4 root netem delay $(VM_NETWORK_LATENCY)ms\n"; \
 	fi; \
 	if [ -n "$(VM_NETWORK_PACKET_LOSS)" ]; then \
-		QOS_COMMANDS="$$QOS_COMMANDS  - tc qdisc add dev extra0 root netem loss $(VM_NETWORK_PACKET_LOSS)%\n"; \
+		QOS_COMMANDS="$$QOS_COMMANDS  - tc qdisc add dev ens4 root netem loss $(VM_NETWORK_PACKET_LOSS)%\n"; \
 	fi; \
 	if [ -z "$$QOS_COMMANDS" ]; then \
 		QOS_COMMANDS="  # No network QoS configured"; \
@@ -250,7 +250,7 @@ show-stats: check-multipass
 		iostat -x 1 1 | tail -n +4; \
 		echo ''; \
 		echo '=== Network Stats ==='; \
-		ip -s link show extra0 | grep -A1 'RX:'"
+		ip -s link show ens4 | grep -A1 'RX:'"
 
 stress-test: check-multipass
 	@echo "[*] Running stress test on VM: $(VM_NAME)"
